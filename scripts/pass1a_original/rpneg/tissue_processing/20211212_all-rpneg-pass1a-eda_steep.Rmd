@@ -1,0 +1,1207 @@
+---
+title: | 
+ | PASS1A/PASS1C Metabolomics: 
+ | Data EDA/Cleaning/Imputation/Transformation--all_rpneg_pass1a.0 (pass1a 1.0 post-IS)
+author: "Alec Steep, Jun Li"
+date: "12/12/2021"
+always_allow_html: true
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    code_folding: hide
+    highlight: zenburn
+    css: ../../../../style/style.css
+---
+
+# CONFIGURATIONS
+```{r setup, message=FALSE, results='hide', warning = FALSE, echo = TRUE}
+# Set the working directory and tool paths on your local computer.
+WD <- '/Users/Alec/motrpac/20210826_pass1c-umich'
+# Set the gsutil path
+
+knitr::opts_knit$set(root.dir=WD)
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(cache = FALSE)
+```
+
+##### CSS Top Styling
+```{r CSS Top Styling}
+write_css = FALSE
+if(write_css){
+  writeLines("td, th { padding : 3px } th { background-color:white; color:black; border:1px solid black; text-align:center } td {color:black; border:1px solid black; word-wrap:break-word; white-space:nowrap; overflow: hidden; text-overflow: ellipsis; max-width:300px; text-align:left}", con=file.path(normalizePath(WD), "style/style.css"))
+}
+```
+
+##### Overview
+
+##### Goals of Analysis
+- Examine data dimensions
+- Examine zero, negative, and missing Values
+- Impute missing values
+- Visualize sample-by-sample correlations
+- Identify outliers
+- Identify major causes of variance (drift, sex, control group, hour)
+- Visualize sample-by-feature heatmaps under different transformations
+- Examine sample median and sd distributions between each transformation
+- Transform data
+- Remove outlier samples
+- Save the processed data
+
+# Prepare Environment & Load Data
+
+## Setup the Environment
+```{r Setup the Environment, message=FALSE, results='hide', warning = FALSE, echo = TRUE}
+################################################################################
+##### Resources and Dependencies ###############################################
+################################################################################
+# Whether to knit document and display data
+knit_time = TRUE
+
+# Load dependencies
+pacs...man <- c("tidyverse","kableExtra","devtools","MotrpacBicQC","impute","glue",
+                "rethinking")
+for(pac in pacs...man){
+  suppressWarnings(suppressPackageStartupMessages(library(pac, character.only = TRUE)))
+}
+
+#browseVignettes("MotrpacBicQC")
+############################################################
+##### Functions ############################################
+############################################################
+
+# Name functions
+select <- dplyr::select
+map <- purrr::map
+desc <- dplyr::desc
+arrange <- dplyr::arrange
+melt <- reshape2::melt
+mutate <- dplyr::mutate
+glue <- glue::glue
+
+# Global options
+options(dplyr.print_max = 100)
+options(scipen=10000)
+
+# Colors
+redblue100<-rgb(read.table(paste0(WD,'/colors/redblue100.txt'),sep='\t',row.names=1,header=T))
+```
+
+## Log Variables (1)
+```{r}
+ds <- 'pass1a'
+site <- 'umich'
+tech <- 'rpneg'
+TIS <- list('PLA', 'HIP', 'GAS', 'HRT', 'KID', 'LUN', 'LIV', 'BADI', 'WADI')
+tis <- list('pla', 'hip', 'gas', 'hrt', 'kid', 'lun', 'liv', 'badi', 'wadi')
+```
+
+## Load Phenotype data
+```{r}
+# Phenotype Data (1A)
+#########################
+pheno_file <- glue("{WD}/data/20201021_pass1a-06-pheno-viallabel_steep.txt")
+pheno_df1a <- read.csv(pheno_file, header = T, sep = '\t')
+pheno_df1a <- pheno_df1a %>%
+  mutate(tissue = case_when(Specimen.Processing.sampletypedescription == 'Brown Adipose' ~ 'badi',
+                            Specimen.Processing.sampletypedescription == 'EDTA Plasma' ~ 'pla',
+                            Specimen.Processing.sampletypedescription == 'Gastrocnemius' ~ 'gas',
+                            Specimen.Processing.sampletypedescription == 'Heart' ~ 'hrt',
+                            Specimen.Processing.sampletypedescription == 'Kidney' ~ 'kid',
+                            Specimen.Processing.sampletypedescription == 'Liver' ~ 'liv',
+                            Specimen.Processing.sampletypedescription == 'Lung' ~ 'lun',
+                            Specimen.Processing.sampletypedescription == 'White Adipose' ~ 'wadi',
+                            Specimen.Processing.sampletypedescription == 'PaxGene RNA' ~ 'pax',
+                            Specimen.Processing.sampletypedescription == 'Hippocampus' ~ 'hip',
+                            Specimen.Processing.sampletypedescription == 'Cortex' ~ 'cor',
+                            Specimen.Processing.sampletypedescription == 'Hypothalamus' ~ 'hyp',
+                            Specimen.Processing.sampletypedescription == 'Vastus Lateralis' ~ 'vas',
+                            Specimen.Processing.sampletypedescription == 'Tibia' ~ 'tib',
+                            Specimen.Processing.sampletypedescription == 'Aorta' ~ 'aor',
+                            Specimen.Processing.sampletypedescription == 'Small Intestine' ~ 'sma',
+                            Specimen.Processing.sampletypedescription == 'Adrenals' ~ 'adr',
+                            Specimen.Processing.sampletypedescription == 'Colon' ~ 'col',
+                            Specimen.Processing.sampletypedescription == 'Spleen' ~ 'spl',
+                            Specimen.Processing.sampletypedescription == 'Testes' ~ 'tes',
+                            Specimen.Processing.sampletypedescription == 'Ovaries' ~ 'ova'))
+pheno_df1a$viallabel <- as.character(pheno_df1a$viallabel)
+```
+
+## Load Data
+
+### Load the sample order files
+```{r}
+# #created in 20210910_pass1a-umich-sample-annotation_steep.Rmd
+# order_file <- glue("{WD}/data/20200910_pass1a1c-sample-order_steep.txt")
+# sample.order<-read.delim(order_file,header=T, sep="\t")
+
+# Load the prior pass1a data (takes a few minutes)
+pass1a_nested_file <- glue("{WD}/../20200915_metabolomics-pass1a/data/20201010_pass1a-metabolomics-countdata-nested_steep.rds")
+pass1a_df <- readRDS(pass1a_nested_file)
+
+# pla
+pla_rpneg_pass1a.0.order <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'rpneg') %>%
+  filter(TISSUE == 'plasma') %>%
+  select(SAMPLE_DATA) %>%
+  unnest(SAMPLE_DATA) %>%
+  left_join(y = pheno_df1a, by = c('sample_id' = 'viallabel')) %>%
+  select(sample_id, sample_type, sample_order, Key.anirandgroup, Registration.sex)
+
+# hip
+hip_rpneg_pass1a.0.order <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'rpneg') %>%
+  filter(TISSUE == 'hippocampus') %>%
+  select(SAMPLE_DATA) %>%
+  unnest(SAMPLE_DATA) %>%
+  left_join(y = pheno_df1a, by = c('sample_id' = 'viallabel')) %>%
+  select(sample_id, sample_type, sample_order, Key.anirandgroup, Registration.sex)
+
+# gas
+gas_rpneg_pass1a.0.order <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'rpneg') %>%
+  filter(TISSUE == 'gastrocnemius') %>%
+  select(SAMPLE_DATA) %>%
+  unnest(SAMPLE_DATA) %>%
+  left_join(y = pheno_df1a, by = c('sample_id' = 'viallabel')) %>%
+  select(sample_id, sample_type, sample_order, Key.anirandgroup, Registration.sex)
+
+# hrt
+hrt_rpneg_pass1a.0.order <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'rpneg') %>%
+  filter(TISSUE == 'heart') %>%
+  select(SAMPLE_DATA) %>%
+  unnest(SAMPLE_DATA) %>%
+  left_join(y = pheno_df1a, by = c('sample_id' = 'viallabel')) %>%
+  select(sample_id, sample_type, sample_order, Key.anirandgroup, Registration.sex)
+
+# kid
+kid_rpneg_pass1a.0.order <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'rpneg') %>%
+  filter(TISSUE == 'kidney') %>%
+  select(SAMPLE_DATA) %>%
+  unnest(SAMPLE_DATA) %>%
+  left_join(y = pheno_df1a, by = c('sample_id' = 'viallabel')) %>%
+  select(sample_id, sample_type, sample_order, Key.anirandgroup, Registration.sex)
+
+# lun
+lun_rpneg_pass1a.0.order <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'rpneg') %>%
+  filter(TISSUE == 'lung') %>%
+  select(SAMPLE_DATA) %>%
+  unnest(SAMPLE_DATA) %>%
+  left_join(y = pheno_df1a, by = c('sample_id' = 'viallabel')) %>%
+  select(sample_id, sample_type, sample_order, Key.anirandgroup, Registration.sex)
+
+# liv
+liv_rpneg_pass1a.0.order <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'rpneg') %>%
+  filter(TISSUE == 'liver') %>%
+  select(SAMPLE_DATA) %>%
+  unnest(SAMPLE_DATA) %>%
+  left_join(y = pheno_df1a, by = c('sample_id' = 'viallabel')) %>%
+  select(sample_id, sample_type, sample_order, Key.anirandgroup, Registration.sex)
+
+# badi
+badi_rpneg_pass1a.0.order <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'rpneg') %>%
+  filter(TISSUE == 'brown-adipose') %>%
+  select(SAMPLE_DATA) %>%
+  unnest(SAMPLE_DATA) %>%
+  left_join(y = pheno_df1a, by = c('sample_id' = 'viallabel')) %>%
+  select(sample_id, sample_type, sample_order, Key.anirandgroup, Registration.sex)
+
+# wadi
+wadi_rpneg_pass1a.0.order <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'rpneg') %>%
+  filter(TISSUE == 'white-adipose') %>%
+  select(SAMPLE_DATA) %>%
+  unnest(SAMPLE_DATA) %>%
+  left_join(y = pheno_df1a, by = c('sample_id' = 'viallabel')) %>%
+  select(sample_id, sample_type, sample_order, Key.anirandgroup, Registration.sex)
+
+rm(pass1a_df)
+
+# Create a list of annotation matrixes
+rpneg_pass1a.0.order <- list(pla_rpneg_pass1a.0.order, hip_rpneg_pass1a.0.order, gas_rpneg_pass1a.0.order, 
+                 hrt_rpneg_pass1a.0.order, kid_rpneg_pass1a.0.order, lun_rpneg_pass1a.0.order, 
+                 liv_rpneg_pass1a.0.order, badi_rpneg_pass1a.0.order, wadi_rpneg_pass1a.0.order)
+
+# Save the Sample order file
+save(pla_rpneg_pass1a.0.order, hip_rpneg_pass1a.0.order, gas_rpneg_pass1a.0.order, 
+                 hrt_rpneg_pass1a.0.order, kid_rpneg_pass1a.0.order, lun_rpneg_pass1a.0.order, 
+                 liv_rpneg_pass1a.0.order, badi_rpneg_pass1a.0.order, wadi_rpneg_pass1a.0.order,
+     file = glue("{WD}/data/UM-rpneg/rpneg_pass1a.0.order.RData"))
+
+```
+
+### Load the matrices as .RData files
+```{r, message=FALSE, results='hide', warning = FALSE, echo = TRUE}
+# UM-rpneg
+load(file = glue("{WD}/data/UM-rpneg/UM_rpneg.0.RData"))
+pla1a.0 <- pla_rpneg_pass1a.0
+hip1a.0 <- hip_rpneg_pass1a.0
+gas1a.0 <- gas_rpneg_pass1a.0
+hrt1a.0 <- hrt_rpneg_pass1a.0
+kid1a.0 <- kid_rpneg_pass1a.0
+lun1a.0 <- lun_rpneg_pass1a.0
+liv1a.0 <- liv_rpneg_pass1a.0
+badi1a.0 <- badi_rpneg_pass1a.0
+wadi1a.0 <- wadi_rpneg_pass1a.0
+
+# Create a list of matrices
+pass1a.0 <- list(pla1a.0, hip1a.0, gas1a.0, hrt1a.0, kid1a.0, lun1a.0, liv1a.0, badi1a.0, wadi1a.0)
+```
+
+## Remove Internal Standards
+```{r}
+is <- list()
+for(i in 1:length(pass1a.0)){
+  # Remove internal standards
+  is[[i]] <- colnames(pass1a.0[[i]])[grepl("istd", colnames(pass1a.0[[i]]), ignore.case = TRUE)]
+  # Subset matrix
+  pass1a.0[[i]] <- pass1a.0[[i]][, !colnames(pass1a.0[[i]]) %in% is]
+}
+```
+
+### Create Annotations
+```{r}
+i <- 1
+tmp.iter1a <- tmp.ref1a <- tmp.sample1a <- pass1a.0.nr <- list()
+for(i in 1:length(rpneg_pass1a.0.order)){
+  print(tis[[i]])
+  # Collect the distances from reference samples
+  tmp.iter1a[[i]] <- rpneg_pass1a.0.order[[i]] %>%
+    mutate(reference = ifelse(str_sub(sample_id,1,1) == '9', 0, 1)) %>%
+    mutate(drift = ifelse(sample_type == 'QC-DriftCorrection', 1, 0)) %>%
+    arrange(sample_order)
+  tmp.iter1a[[i]]$right_p <- 0
+  for(j in 1:nrow(tmp.iter1a[[i]])){
+    # set t
+    if(tmp.iter1a[[i]][j,'reference'] == 1){
+      t = 0
+    }else if(tmp.iter1a[[i]][j,'reference'] == 0){
+      t = t + 1
+    }
+    tmp.iter1a[[i]][j,"right_p"] <- t
+  }
+  t=0
+  tmp.iter1a[[i]]$right_p_d <- 0
+  for(j in 1:nrow(tmp.iter1a[[i]])){
+    # set t
+    if(tmp.iter1a[[i]][j,'drift'] == 1){
+      t = 0
+    }else if(tmp.iter1a[[i]][j,'drift'] == 0){
+      t = t + 1
+    }
+    tmp.iter1a[[i]][j,"right_p_d"] <- t
+  }
+  t=0
+
+  tmp.iter1a[[i]] <- tmp.iter1a[[i]] %>%
+    arrange(desc(sample_order))
+  tmp.iter1a[[i]]$left_p <- 0
+  for(j in 1:nrow(tmp.iter1a[[i]])){
+    # set t
+    if(tmp.iter1a[[i]][j,'reference'] == 1){
+      t = 0
+    }else if(tmp.iter1a[[i]][j,'reference'] == 0){
+      t = t + 1
+    }
+    tmp.iter1a[[i]][j,"left_p"] <- t
+  }
+  t=0
+  tmp.iter1a[[i]]$left_p_d <- 0
+  for(j in 1:nrow(tmp.iter1a[[i]])){
+    # set t
+    if(tmp.iter1a[[i]][j,'drift'] == 1){
+      t = 0
+    }else if(tmp.iter1a[[i]][j,'drift'] == 0){
+      t = t + 1
+    }
+    tmp.iter1a[[i]][j,"left_p_d"] <- t
+  }
+  t=0
+
+  tmp.iter1a[[i]] <- tmp.iter1a[[i]] %>%
+    rowwise() %>%
+    mutate(min_p = min(c(left_p,right_p) ,na.rm = TRUE)) %>%
+    mutate(sum_p = sum(c(left_p,right_p) ,na.rm = TRUE)) %>%
+    mutate(min_p_d = min(c(left_p_d,right_p_d) ,na.rm = TRUE)) %>%
+    mutate(sum_p_d = sum(c(left_p_d,right_p_d) ,na.rm = TRUE)) %>%
+    arrange(sample_order)
+  tmp.join1a <- tmp.iter1a[[i]] %>%
+    select(sample_id, sample_order, left_p, right_p, min_p, sum_p, left_p_d, right_p_d, min_p_d, sum_p_d)
+
+  # Collect the sample order for test+ref samples
+  tmp.ref1a[[i]] <- rpneg_pass1a.0.order[[i]] %>%
+    arrange(sample_order) %>% 
+    mutate(control = ifelse(grepl('Control', Key.anirandgroup), 1, 0)) %>%
+    mutate(drift = ifelse(grepl('Drift', sample_type), 1, 0)) %>%
+    mutate(reference = ifelse(str_sub(sample_id,1,1) == '9', 0, 1)) %>%
+    mutate(time = case_when(grepl('IPE', Key.anirandgroup) ~ 0,
+                            grepl('0 hr', Key.anirandgroup) ~ 0,
+                            grepl('0.5 hr', Key.anirandgroup) ~ 0.5,
+                            grepl('1 hr', Key.anirandgroup) ~ 1,
+                            grepl('4 hr', Key.anirandgroup) ~ 4,
+                            grepl('7 hr', Key.anirandgroup) ~ 7,
+                            grepl('24 hr', Key.anirandgroup) ~ 24,
+                            grepl('48 hr', Key.anirandgroup) ~ 48)) %>%
+    left_join(y = tmp.join1a) %>%
+    select(sample_id,sample_order, Registration.sex, control, time, drift, reference,
+         left_p, right_p, min_p, sum_p, left_p_d, right_p_d, min_p_d, sum_p_d)
+  N2 <- tmp.ref1a[[i]][,1] %>% unlist()
+  miss1 <- N2[!N2 %in% row.names(pass1a.0[[i]])] # Verify all samples are in the pass1a.0[[i]] file
+  miss1
+  # sample.order %>% filter(sample_id == "90750016606")
+  print('Vice Versa:')
+  miss2 <- row.names(pass1a.0[[i]])[!row.names(pass1a.0[[i]]) %in% N2]
+  miss2
+  N2 <- N2[!N2 %in% c(miss1,miss2)] # TODO: investigate why samples are missing, continue for now
+  # Reorder pass1a.0[[i]] by run order
+  pass1a.0[[i]] <- pass1a.0[[i]][N2,]
+  all(N2 == row.names(pass1a.0[[i]])) # Must be true
+  tmp.ref1a[[i]] <- tmp.ref1a[[i]] %>%
+    filter(sample_id %in% N2) %>%
+    select(sample_order, Registration.sex, control, time, drift, reference,
+           left_p, right_p, min_p, sum_p, left_p_d, right_p_d, min_p_d, sum_p_d) %>% as.matrix()
+
+  # Collect the sample order for test samples
+  options(digits = 14)
+  tmp.sample1a[[i]] <- rpneg_pass1a.0.order[[i]] %>%
+    filter(substr(sample_id, 1, 1) == '9') %>%
+    arrange(sample_order) %>% 
+    mutate(control = ifelse(grepl('Control', Key.anirandgroup), 1, 0)) %>%
+    mutate(time = case_when(grepl('IPE', Key.anirandgroup) ~ 0,
+                            grepl('0 hr', Key.anirandgroup) ~ 0,
+                            grepl('0.5 hr', Key.anirandgroup) ~ 0.5,
+                            grepl('1 hr', Key.anirandgroup) ~ 1,
+                            grepl('4 hr', Key.anirandgroup) ~ 4,
+                            grepl('7 hr', Key.anirandgroup) ~ 7,
+                            grepl('24 hr', Key.anirandgroup) ~ 24,
+                            grepl('48 hr', Key.anirandgroup) ~ 48)) %>%
+    left_join(y = tmp.join1a) %>%
+    mutate(sample_id = str_replace_all(sample_id, pattern = '-', replacement = '')) %>%
+    mutate(sample_id = as.numeric(sample_id)) %>%
+    select(sample_id, sample_order, Registration.sex, control, time, 
+           left_p, right_p, min_p, sum_p, left_p_d, right_p_d, min_p_d, sum_p_d) %>%
+    as.matrix()
+
+  N1 <- row.names(pass1a.0[[i]])[substr(row.names(pass1a.0[[i]]), 1, 1) == '9']
+  tmp.sample1a[[i]] <- tmp.sample1a[[i]][tmp.sample1a[[i]][,1] %in% N1,]
+  # Reorder pass1a.0[[i]].nr by run order
+  pass1a.0.nr[[i]] <- pass1a.0[[i]][N1,]
+  tmp.sample1a[[i]][,1][!tmp.sample1a[[i]][,1] %in% row.names(pass1a.0.nr[[i]])] # Verify all samples are in the pass1a.0[[i]] file
+  all(as.character(tmp.sample1a[[i]][,1]) == row.names(pass1a.0.nr[[i]]))
+  # If out of order, command below will ensure pass1a.0[[i]].nr in run order
+  #pass1a.0[[i]].nr <- pass1a.0[[i]].nr[as.character(tmp.sample1a[[i]][,1]),]
+}
+```
+
+# Dimensions, Zero/Neg/Missing Values, & Log2
+
+## Dimensions (with reference samples)
+```{r}
+# Lists
+NR <- P <- list()
+for(i in 1:length(pass1a.0)){
+  print(tis[[i]])
+  NR[[i]] <- dim(pass1a.0[[i]])[1]
+  P[[i]] <- dim(pass1a.0[[i]])[2]
+  print(dim(pass1a.0[[i]]))
+}
+```
+
+## Dimensions (without reference samples)
+```{r}
+N <- list()
+for(i in 1:length(pass1a.0.nr)){
+  print(tis[[i]])
+  N[[i]] <- dim(pass1a.0.nr[[i]])[1]
+  print(dim(pass1a.0.nr[[i]]))
+}
+```
+
+## Negative or Zero Values
+confirmed: no negative or zero values
+```{r}
+for(i in 1:length(pass1a.0.nr)){
+  print(tis[[i]])
+  print(min(pass1a.0[[i]],na.rm=T))
+}
+```
+
+## Missing Features (with references)
+Blank reference samples at the beginning and end
+```{r}
+pass1a.0.f.c0 <- list()
+for(i in 1:length(pass1a.0)){
+  pass1a.0.f.c0[[i]] <-apply(pass1a.0[[i]],1,function(x) sum(is.na(x))) 
+}
+
+# Plot
+par(mfrow=c(3,3), mar = c(2,3,2,0))
+for(i in 1:length(pass1a.0)){
+  plot(pass1a.0.f.c0[[i]], ylim = c(0,max(unlist(P))), main = glue("{tis[[i]]}"), xlab = 'Samples', ylab = 'Missing Values')
+}
+```
+
+## Blank Samples (without references)
+No blank test samples
+```{r}
+pass1a.0.nr.f.c0 <- list()
+for(i in 1:length(pass1a.0.nr)){
+  pass1a.0.nr.f.c0[[i]] <-apply(pass1a.0.nr[[i]],1,function(x) sum(is.na(x))) 
+}
+
+# Plot
+par(mfrow=c(3,3), mar = c(2,3,2,0))
+for(i in 1:length(pass1a.0.nr)){
+  plot(pass1a.0.nr.f.c0[[i]], ylim = c(0,max(unlist(P))), main = glue("{tis[[i]]}"), xlab = 'Samples', ylab = 'Missing Values')
+}
+
+```
+
+## Examine Distribution of missing values (with reference samples)
+```{r}
+pass1a.0.f.c0 <- list()
+for(i in 1:length(pass1a.0.nr)){
+  pass1a.0.f.c0[[i]] <- apply(pass1a.0[[i]],2,function(x) sum(is.na(x))) 
+}
+# Plot
+par(mfrow=c(3,3), mar = c(2,3,2,0))
+for(i in 1:length(pass1a.0.nr)){
+  plot(pass1a.0.f.c0[[i]], ylim = c(0,max(unlist(NR))), main = glue("{tis[[i]]}"), xlab = 'Features', ylab = 'Missing Values')
+}
+
+```
+
+## Examine Distribution of missing values (test samples only)
+```{r}
+pass1a.0.nr.f.c0 <- list()
+for(i in 1:length(pass1a.0.nr)){
+  pass1a.0.nr.f.c0[[i]] <- apply(pass1a.0.nr[[i]],2,function(x) sum(is.na(x))) 
+}
+# Plot
+par(mfrow=c(3,3), mar = c(2,3,2,0))
+for(i in 1:length(pass1a.0.nr)){
+  plot(pass1a.0.nr.f.c0[[i]], ylim = c(0,max(unlist(N))), main = glue("{tis[[i]]}"), xlab = 'Features', ylab = 'Missing Values'); abline(h = 20)
+}
+```
+
+## Remove high-missing features
+Remove high missing features
+```{r}
+rm_n <- list()
+for(i in 1:length(pass1a.0.nr.f.c0)){
+  print(tis[[i]])
+  rm_n[[i]] <- sum(pass1a.0.nr.f.c0[[i]]>=20)
+  pass1a.0[[i]] <- pass1a.0[[i]][,pass1a.0.nr.f.c0[[i]]<20]
+  pass1a.0.nr[[i]] <- pass1a.0.nr[[i]][,pass1a.0.nr.f.c0[[i]]<20]
+  print(dim(pass1a.0[[i]]))
+  print(dim(pass1a.0.nr[[i]]))
+}
+```
+
+## Take the log2
+```{r}
+pass1a.0.1 <- pass1a.0.nr1 <- list()
+for(i in 1:length(pass1a.0)){
+  pass1a.0.1[[i]] <- log(pass1a.0[[i]], 2)
+  pass1a.0.nr1[[i]] <- log(pass1a.0.nr[[i]], 2)
+}
+```
+
+## Total missing values (includes reference samples)
+```{r}
+for(i in 1:length(pass1a.0.1)){
+  print(glue("{tis[[i]]}"))
+  print(sum(is.na(pass1a.0.1[[i]])))
+}
+```
+
+## Total missing values (test samples)
+```{r}
+feature_impute <- list()
+for(i in 1:length(pass1a.0.nr1)){
+  print(tis[[i]])
+  print(sum(is.na(pass1a.0.nr1[[i]])))
+  feature_impute[[i]] <- apply(is.na(pass1a.0.nr1[[i]]),2,sum)[apply(is.na(pass1a.0.nr1[[i]]),2,sum) > 0]
+}
+```
+
+## Confirm New Distribution of missing features (test samples only)
+```{r}
+pass1a.0.nr1.f.c0 <- list()
+for(i in 1:length(pass1a.0.nr1)){
+  pass1a.0.nr1.f.c0[[i]] <- apply(pass1a.0.nr1[[i]],2,function(x) sum(is.na(x))) 
+}
+
+# Plot
+par(mfrow=c(3,3), mar = c(2,3,2,0))
+for(i in 1:length(pass1a.0.nr1)){
+  plot(pass1a.0.nr1.f.c0[[i]], ylim = c(0,max(unlist(NR))), main = glue("{tis[[i]]}"), xlab = 'Features', ylab = 'Missing Values'); abline(h = 20)
+}
+```
+
+## Log Variables (2)
+```{r}
+# NR
+# N
+# P
+neg_vals <- 0
+zero_vals <- 0
+feature_na_filter <- 20
+knn_k <- 10
+
+
+P1 <- NR1 <- N1 <- na_vals_impute <- list()
+for(i in 1:length(pass1a.0)){
+  print(tis[[i]])
+  P1[[i]] <- dim(pass1a.0.nr[[i]])[2]
+  NR1[[i]] <- dim(pass1a.0[[i]])[1]
+  N1[[i]] <- dim(pass1a.0.nr[[i]])[1]
+  na_vals_impute[[i]] <- sum(is.na(pass1a.0.nr1[[i]]))
+  print(feature_impute[[i]])
+}
+```
+
+# Imputation
+
+## Imputation (test samples)
+```{r}
+pass1a.0.nr2 <- list()
+for(i in 1:length(pass1a.0)){
+  if(na_vals_impute[[i]] > 0){
+    print(tis[[i]])
+    glue("Features & Values to impute:")
+    feature_impute[[i]]
+    pass1a.0.nr2[[i]] <-impute.knn(pass1a.0.nr1[[i]],k=10)$data
+    #view the features before and after imputation
+    par(mfrow=c(2,1),bg="black")
+    image(as.matrix(pass1a.0.nr1[[i]][,pass1a.0.nr1.f.c0[[i]]>0]),col=redblue100,axes=F)
+    image(as.matrix(pass1a.0.nr2[[i]][, pass1a.0.nr1.f.c0[[i]]>0]),col=redblue100,axes=F)
+    par(mfrow=c(1,1) ,bg="white")
+    glue("Verified no missing values: {sum(is.na(pass1a.0.nr2[[i]]))}")  #verified 0
+  }else{
+    print('No missing values to impute')
+    pass1a.0.nr2[[i]] <- pass1a.0.nr1[[i]]
+  }
+}
+```
+
+# NxN heatmaps
+
+## Plotting NxN heatmaps (+ reference samples)
+```{r}
+a <- list(0.82,0.85,0.80,
+       0.80,0.80,0.82,
+       0.80,0.80,0.80)
+b <- 1
+par(mfrow=c(3,3), mar = c(0,0,3,0))
+i <- 1
+for(i in 1:length(pass1a.0)){
+  print(tis[[i]])
+  x <- tmp.ref1a[[i]][,1]
+  sidebar  <- ( (b - a[[i]]) * ((x - min(x))/((max(x) - min(x)))) + a[[i]]) 
+  sidebar <- cbind(sidebar,sidebar,sidebar)
+  cor.tmp<-cor(t(pass1a.0.1[[i]]),method="spearman",use="pairwise.complete.obs") #includes ref samples
+  print(dim(cor.tmp))
+  image(cbind(cor.tmp,sidebar),
+            col=redblue100,axes=FALSE,zlim=c(a[[i]],1), main=glue("{TIS[[i]]}2-{NR1[[i]]},
+                                                                  run-order, z=({a[[i]]},1)"), asp = 1)
+}
+# if(knit_time){
+#   rpneg_pass1a.0.order[[i]] %>%
+#     arrange(sample_order) %>%
+#     select(sample_id, sample_type, sample_order) %>%
+#     knitr::kable(format = "html") %>%
+#     scroll_box(width = "100%", height = "400px")
+# }
+```
+
+## Plotting NxN heatmaps (test samples) and Identification of Outlier Samples
+```{r}
+cor.tmp <- o.s <- list()
+par(mfrow=c(3,3), mar = c(0,0,3,0))
+for(i in 1:length(pass1a.0)){
+  x <- tmp.sample1a[[i]][,2]
+  sidebar  <- ( (b - a[[i]]) * ((x - min(x))/((max(x) - min(x)))) + a[[i]]) 
+  sidebar <- cbind(sidebar,sidebar,sidebar)
+  cor.tmp[[i]]<-cor(t(pass1a.0.nr1[[i]]),method="spearman",use="pairwise.complete.obs")
+  glue("Verified {N[[i]]} test samples: {dim(cor.tmp)[1]}") #verified, =78
+  image(
+    cbind(cor.tmp[[i]][order(tmp.sample1a[[i]][,2]),],sidebar),
+    col=redblue100,axes=FALSE, zlim=c(a[[i]],1), main=glue("{TIS[[i]]}2-{N1[[i]]}, 
+                                                           Run-Order, z=({a[[i]]},1)"), asp = 1)
+}
+
+# Outlier sample filter
+o.f <- list(0.89, 0.915, 0.89,
+            0.89, 0.90, 0.90,
+            0.90, 0.89, 0.87)
+par(mfrow=c(3,3), mar = c(2,3,2,0))
+for(i in 1:length(pass1a.0)){
+  plot(apply(cor.tmp[[i]][order(tmp.sample1a[[i]][,2]),order(tmp.sample1a[[i]][,2])],1,median), main = glue("{tis[[i]]}"),
+       xlab = 'Samples (Run-Order)', ylab = 'Cor Medians'); abline(h=o.f[[i]], col = 'blue')
+}
+# Determine which samples are outliers
+for(i in 1:length(pass1a.0)){
+  if(is.na(o.f[[i]])){
+    o.s[[i]] <- NA
+  }else{
+    o.s[[i]] <- colnames(cor.tmp[[i]])[apply(cor.tmp[[i]],1,median)<o.f[[i]]]
+  }
+  glue("Outlier Samples: {length(o.s[[i]])}")
+}
+# Examine outliers
+glue("Outlier Samples in {TIS[[1]]}:")
+rpneg_pass1a.0.order[[1]] %>% filter(sample_id %in% o.s[[1]]) %>%
+  knitr::kable(format = "html") %>% scroll_box(width = "100%", height = "100%")
+glue("Outlier Samples in {TIS[[2]]}:")
+rpneg_pass1a.0.order[[2]] %>% filter(sample_id %in% o.s[[2]]) %>%
+  knitr::kable(format = "html") %>% scroll_box(width = "100%", height = "100%")
+glue("Outlier Samples in {TIS[[3]]}:")
+rpneg_pass1a.0.order[[3]] %>% filter(sample_id %in% o.s[[3]]) %>%
+  knitr::kable(format = "html") %>% scroll_box(width = "100%", height = "100%")
+glue("Outlier Samples in {TIS[[4]]}:")
+rpneg_pass1a.0.order[[4]] %>% filter(sample_id %in% o.s[[4]]) %>%
+  knitr::kable(format = "html") %>% scroll_box(width = "100%", height = "100%")
+glue("Outlier Samples in {TIS[[5]]}:")
+rpneg_pass1a.0.order[[5]] %>% filter(sample_id %in% o.s[[5]]) %>%
+  knitr::kable(format = "html") %>% scroll_box(width = "100%", height = "100%")
+glue("Outlier Samples in {TIS[[6]]}:")
+rpneg_pass1a.0.order[[6]] %>% filter(sample_id %in% o.s[[6]]) %>%
+  knitr::kable(format = "html") %>% scroll_box(width = "100%", height = "100%")
+glue("Outlier Samples in {TIS[[7]]}:")
+rpneg_pass1a.0.order[[7]] %>% filter(sample_id %in% o.s[[7]]) %>%
+  knitr::kable(format = "html") %>% scroll_box(width = "100%", height = "100%")
+glue("Outlier Samples in {TIS[[8]]}:")
+rpneg_pass1a.0.order[[8]] %>% filter(sample_id %in% o.s[[8]]) %>%
+  knitr::kable(format = "html") %>% scroll_box(width = "100%", height = "100%")
+glue("Outlier Samples in {TIS[[9]]}:")
+rpneg_pass1a.0.order[[9]] %>% filter(sample_id %in% o.s[[9]]) %>%
+  knitr::kable(format = "html") %>% scroll_box(width = "100%", height = "100%")
+```
+
+## Visualize the Sex-Time-Control NxN Heatmap
+```{r}
+par(mfrow=c(3,3), mar = c(0,0,3,0))
+for(i in 1:length(pass1a.0)){
+  x <- tmp.sample1a[[i]][,3]
+  sex.type  <- ( (b - a[[i]]) * ((x - min(x))/((max(x) - min(x)))) + a[[i]]) 
+  x <- tmp.sample1a[[i]][,4]
+  control.type  <- ( (b - a[[i]]) * ((x - min(x))/((max(x) - min(x)))) + a[[i]]) 
+  x <- as.factor(tmp.sample1a[[i]][,5]) %>% as.numeric()
+  time.type  <- ( (b - a[[i]]) * ((x - min(x))/((max(x) - min(x)))) + a[[i]]) 
+  sidebar<-cbind(sex.type,sex.type,sex.type, 
+               control.type,control.type,control.type, 
+               time.type,time.type,time.type)
+  image(
+    cbind(
+    cor.tmp[[i]][order(tmp.sample1a[[i]][,3],tmp.sample1a[[i]][,4],tmp.sample1a[[i]][,5]),
+          order(tmp.sample1a[[i]][,3],tmp.sample1a[[i]][,4],tmp.sample1a[[i]][,5])],
+   sidebar[order(tmp.sample1a[[i]][,3],tmp.sample1a[[i]][,4],tmp.sample1a[[i]][,5]),]),
+    col=redblue100,axes=FALSE, zlim=c(a[[i]],1), main=glue("{TIS[[i]]}2-{N[[i]]}, 
+                                                           Sex-Control-Time, z=({a[[i]]},1)"), asp = 1)
+}
+par(mfrow=c(3,3), mar = c(2,3,2,0))
+for(i in 1:length(pass1a.0)){
+  plot(apply(cor.tmp[[i]][order(tmp.sample1a[[i]][,3],tmp.sample1a[[i]][,4],tmp.sample1a[[i]][,5]), 
+                         order(tmp.sample1a[[i]][,3],tmp.sample1a[[i]][,4],tmp.sample1a[[i]][,5])],1,median), main = glue("{tis[[i]]}"))
+}
+```
+
+## NxN Heatmap: Test and Reference Samples by Run Order
+```{r}
+cor.tmp1 <- list()
+par(mfrow=c(3,3), mar = c(0,0,3,0))
+for(i in 1:length(pass1a.0)){
+  x <- is.na(tmp.ref1a[[i]][,2]) %>% as.integer()
+  sample.type  <- ( (b - a[[i]]) * ((x - min(x))/((max(x) - min(x)))) + a[[i]]) 
+  sidebar<-cbind(sample.type,sample.type,sample.type,sample.type,sample.type)
+  cor.tmp1[[i]]<-cor(t(pass1a.0.1[[i]]),method="spearman",use="pairwise.complete.obs") #includes ref samples
+  image(
+    cbind(cor.tmp1[[i]], sidebar),
+    col=redblue100,axes=FALSE, zlim=c(a[[i]],1), main=glue("{TIS[[i]]}2, 
+                                                         Run-Order (+Ref-type), z=({a[[i]]},1)"), asp = 1)
+}
+```
+
+## Log Variables (3)
+```{r}
+run_var <- list(0, 0, 0,
+                0, 0, 0,
+                0, 0, 0)
+outlier_sample_n <- list( length(o.s[[1]]),length(o.s[[2]]),length(o.s[[3]]),
+                         length(o.s[[4]]),length(o.s[[5]]),length(o.s[[6]]),
+                         length(o.s[[7]]),length(o.s[[8]]),length(o.s[[9]]) )
+outlier_samples <- o.s
+outlier_filter <- o.f
+```
+
+# N-P Heatmaps, Median and SD Distributions, & Transformations
+
+### N-P Heatmaps: Log2, imputed, sample order,
+Note: Samples as columns
+Sidebar: p-values, t-values, and sig (binary) comparing normal test samples and outlier test samples
+```{r}
+n.s <- hmo <- list()
+par(mfrow=c(3,3), mar = c(0,0,3,0))
+for(i in 1:length(pass1a.0)){
+  n.s[[i]] <- row.names(pass1a.0.nr2[[i]])[!row.names(pass1a.0.nr2[[i]]) %in% o.s[[i]]]
+  hmo[[i]] <- heatmap(pass1a.0.nr2[[i]])$colInd
+}
+for(i in 1:length(pass1a.0)){
+  image(pass1a.0.nr2[[i]][order(tmp.sample1a[[i]][,2]),hmo[[i]]]
+      ,col=redblue100,axes=F,main=glue("{TIS[[i]]}2, 
+                                       f{P1[[i]]}-HC, Run-Order"), asp = 1)
+}
+par(mfrow=c(3,3), mar = c(2,3,2,0))
+for(i in 1:length(pass1a.0)){
+  plot(apply(pass1a.0.nr2[[i]][order(tmp.sample1a[[i]][,2]),hmo[[i]]],1,median), main = glue("{tis[[i]]}"))
+}
+```
+
+### N-P Heatmap: Log2, imputed, Sex-Control-Time order (2)
+Note: pass1a.0.2 and pass1a.0.nr2 represent knn-imputed and log2
+Note: Samples as columns
+```{r}
+par(mfrow=c(3,3), mar = c(0,0,3,0))
+for(i in 1:length(pass1a.0)){
+  a[[i]] <- range(pass1a.0.nr2[[i]])[1]
+  b[[i]] <- range(pass1a.0.nr2[[i]])[2]
+  x <- tmp.sample1a[[i]][,3]
+  sex.type  <- ( (b[[i]] - a[[i]]) * ((x - min(x))/((max(x) - min(x)))) + a[[i]]) 
+  x <- tmp.sample1a[[i]][,4]
+  control.type <- ( (b[[i]] - a[[i]]) * ((x - min(x))/((max(x) - min(x)))) + a[[i]]) 
+  x <- as.factor(tmp.sample1a[[i]][,5]) %>% as.numeric()
+  time.type  <- ( (b[[i]] - a[[i]]) * ((x - min(x))/((max(x) - min(x)))) + a[[i]]) 
+  sidebar<-cbind(sex.type,sex.type,sex.type,sex.type,sex.type, 
+               control.type,control.type, control.type, control.type, control.type,
+               time.type, time.type, time.type, time.type, time.type)
+  image(
+    cbind(pass1a.0.nr2[[i]][order(tmp.sample1a[[i]][,3],tmp.sample1a[[i]][,4],tmp.sample1a[[i]][,5]), hmo[[i]] ], 
+      sidebar[order(tmp.sample1a[[i]][,3],tmp.sample1a[[i]][,4],tmp.sample1a[[i]][,5]),]),
+      col=redblue100,axes=F,main=glue("{TIS[[i]]}2, 
+                                    f{P1[[i]]}-HC, Sex-Control-Time"), asp =1)
+}
+par(mfrow=c(3,3), mar = c(2,3,2,0))
+for(i in 1:length(pass1a.0)){
+  plot(apply(pass1a.0.nr2[[i]][order(tmp.sample1a[[i]][,3],tmp.sample1a[[i]][,4],tmp.sample1a[[i]][,5]),
+     hmo[[i]]],1,median), main = glue("{tis[[i]]}"))
+}
+
+```
+
+### Transformations – only for the test samples. This can be revised to remove outlier samples
+Strategy is not functionally programed (must revert log transformed back to linear for pass1a.0.3a)
+```{r}
+pass1a.0.3a<-pass1a.0.3b<-pass1a.03c<-pass1a.03c2<-pass1a.02b<-pass1a.03d<-pass1a.03d2<-pass1a.02b2<-pass1a.03d3 <- list()
+for(i in 1:length(pass1a.0)){
+  # pass1a.0.r3a<-pass1a.0.r3b<-pass1a.0.r3c<-pass1a.0.r3c2<-pass1a.0.r2b<-pass1a.0.r3d<-pass1a.0.r3d2<-pass1a.0.r2b2<-pass1a.0.r3d3 <-pass1a.0.2
+  pass1a.0.3a[[i]]<-pass1a.0.3b[[i]]<-pass1a.03c[[i]]<-pass1a.03c2[[i]]<-pass1a.02b[[i]]<-pass1a.03d[[i]]<-pass1a.03d2[[i]]<-pass1a.02b2[[i]]<-pass1a.03d3[[i]]<-pass1a.0.nr2[[i]]
+  #pass1a.03c3<-pass1a.0.3b2<-pass1a.0.nr2
+}
+```
+
+### Examine the median and mean distributions (2)
+```{r}
+par(mfrow=c(3,3), mar = c(2,3,2,0))
+for(i in 1:length(pass1a.0)){
+  tmp.s.median <- apply(pass1a.0.nr2[[i]],1, median)
+  tmp.s.mean <- apply(pass1a.0.nr2[[i]],1, mean)
+  plot(tmp.s.median,tmp.s.mean, asp = 1, main = glue("{tis[[i]]}")); abline(0,1)
+}
+```
+
+### Examine the median and sd distribution (1)
+```{r}
+tmp.f.median <- tmp.f.sd <- list()
+par(mfrow=c(3,3), mar = c(2,3,2,0))
+for(i in 1:length(pass1a.0)){
+  tmp.f.median[[i]] <- apply(2^pass1a.0.nr2[[i]],2, median)
+  tmp.f.sd[[i]] <- apply(2^pass1a.0.nr2[[i]],2, sd)
+  plot(y = tmp.f.sd[[i]], x = tmp.f.median[[i]],log="xy", main = glue("{tis[[i]]}"))
+}
+```
+
+### Examine the median and sd distribution (1; w/wo outlier samples)
+```{r}
+tmp2.f.median <- list()
+par(mfrow=c(3,3), mar = c(2,3,2,0))
+for(i in 1:length(pass1a.0)){
+  tmp <- 2^pass1a.0.nr2[[i]][n.s[[i]],]
+  #dim(tmp)
+  tmp2.f.median[[i]] <- apply(tmp,2, median)
+  #tmp2.f.sd <- apply(tmp,2, sd)
+  plot(tmp.f.median[[i]],tmp2.f.median[[i]],log="xy", main = glue("{tis[[i]]}"))
+  #plot(tmp.f.sd,tmp2.f.sd,log="xy")
+}
+
+tmp2.f.sd <- list()
+par(mfrow=c(3,3), mar = c(2,3,2,0))
+for(i in 1:length(pass1a.0)){
+  tmp <- 2^pass1a.0.nr2[[i]][n.s[[i]],]
+  tmp2.f.sd[[i]] <- apply(tmp,2, sd)
+  plot(tmp.f.sd[[i]],tmp2.f.sd[[i]],log="xy",main = glue("{tis[[i]]}"))
+}
+
+```
+
+## Center by median, scale by standard deviation across features (3a)
+Verification of the first feature
+```{r}
+par(mfrow=c(3,3), mar = c(2,3,2,0))
+j <- 148
+for(i in 1:length(pass1a.0)){
+  for (j in 1:length(tmp.f.median[[i]])) {
+    pass1a.0.3a[[i]][,j]<-(2^pass1a.0.nr2[[i]][,j] - tmp.f.median[[i]][j])/ tmp.f.sd[[i]][j]
+  }
+  plot(2^pass1a.0.nr2[[i]][,1],pass1a.0.3a[[i]][,1], main = glue("{tis[[i]]}")) #spot-check, verified
+}
+```
+
+### N-P Heatmap: median-centered, sd-scaled imputed, run order (3a)
+```{r}
+hmo2 <- list()
+for(i in 1:length(pass1a.0)){
+  hmo2[[i]] <- heatmap(pass1a.0.3a[[i]])$colInd
+}
+
+# Run Order; Original HC
+###########################
+par(mfrow=c(3,3), mar = c(0,0,3,0))
+for(i in 1:length(pass1a.0)){
+  image(pass1a.0.3a[[i]][order(tmp.sample1a[[i]][,2]), hmo[[i]]],
+    col=redblue100,axes=F,main=glue("{TIS[[i]]}3a, 
+                                    f{P1[[i]]}-HC, Run-Order"), asp = 1)
+}
+
+# Run Order; New HC
+###########################
+par(mfrow=c(3,3), mar = c(0,0,3,0))
+for(i in 1:length(pass1a.0)){
+  image(pass1a.0.3a[[i]][order(tmp.sample1a[[i]][,2]), hmo2[[i]]],
+    col=redblue100,axes=F,main=glue("{TIS[[i]]}3a, 
+                                    f{P1[[i]]}-HC(3a), Run-Order"), asp = 1)
+}
+
+par(mfrow=c(3,3), mar = c(2,3,2,0))
+for(i in 1:length(pass1a.0)){
+  plot(apply(pass1a.0.3a[[i]][order(tmp.sample1a[[i]][,2]),
+     hmo[[i]]],1,median), main = glue("{tis[[i]]}"), ylim = c(-2,2)); abline(h = 0, col = 'blue')
+}
+
+
+```
+
+### Examine the median and sd distribution (2)
+```{r}
+tmp.f.median2 <- tmp.f.sd2 <- list()
+par(mfrow=c(3,3), mar = c(2,3,2,0))
+for(i in 1:length(pass1a.0)){
+  tmp.f.median2[[i]] <- apply(pass1a.0.nr2[[i]],2, median)
+  tmp.f.sd2[[i]] <- apply(pass1a.0.nr2[[i]],2, sd)
+  plot(y = tmp.f.sd2[[i]], x = tmp.f.median2[[i]],log="xy", main = glue("{tis[[i]]}"))
+}
+```
+
+### Examine the median and sd distribution (2; w/wo outlier samples)
+```{r}
+tmp2.f.median2 <- list()
+par(mfrow=c(3,3), mar = c(2,3,2,0))
+for(i in 1:length(pass1a.0)){
+  tmp <-pass1a.0.nr2[[i]][n.s[[i]],]
+  #dim(tmp)
+  tmp2.f.median2[[i]] <- apply(tmp,2, median)
+  plot(tmp.f.median2[[i]],tmp2.f.median2[[i]],log="xy", main = glue("{tis[[i]]}"))
+}
+
+tmp2.f.sd2 <- list()
+par(mfrow=c(3,3), mar = c(2,3,2,0))
+for(i in 1:length(pass1a.0)){
+  tmp <- pass1a.0.nr2[[i]][n.s[[i]],]
+  tmp2.f.sd2[[i]] <- apply(tmp,2, sd)
+  plot(tmp.f.sd2[[i]],tmp2.f.sd2[[i]],log="xy",main = glue("{tis[[i]]}"))
+}
+```
+
+## Log2, Center by median, scale by standard deviation across features (3b)
+Verification of the first & last feature
+```{r}
+for(i in 1:length(pass1a.0)){
+  for (j in 1:length(tmp2.f.median[[i]])) {
+    pass1a.0.3b[[i]][,j]<-(pass1a.0.nr2[[i]][,j]- tmp.f.median2[[i]][j])/tmp.f.sd2[[i]][j]
+  }
+}
+par(mfrow=c(3,3), mar = c(2,3,2,0))
+for(i in 1:length(pass1a.0)){
+  plot(pass1a.0.nr2[[i]][,1],pass1a.0.3b[[i]][,1], main = glue("{tis[[i]]}")) #spot-check, verified
+}
+for(i in 1:length(pass1a.0)){
+  plot(pass1a.0.nr2[[i]][,P1[[i]]],pass1a.0.3b[[i]][,P1[[i]]], main = glue("{tis[[i]]}")) #spot-check, verified
+}
+
+```
+
+### N-P Heatmap: median-centered, sd-scaled imputed, run order (3b)
+```{r}
+hmo3 <- list()
+for(i in 1:length(pass1a.0)){
+  hmo3[[i]] <- heatmap(pass1a.0.3b[[i]])$colInd
+}
+
+# Run Order; Original HC
+###########################
+par(mfrow=c(3,3), mar = c(0,0,3,0))
+for(i in 1:length(pass1a.0)){
+  image(pass1a.0.3b[[i]][order(tmp.sample1a[[i]][,2]), hmo[[i]]],
+    col=redblue100,axes=F,main=glue("{TIS[[i]]}3b, 
+                                    f{P1[[i]]}-HC, Run-Order"), asp = 1)
+}
+
+# Run Order; New HC
+###########################
+par(mfrow=c(3,3), mar = c(0,0,3,0))
+for(i in 1:length(pass1a.0)){
+  image(pass1a.0.3b[[i]][order(tmp.sample1a[[i]][,2]), hmo3[[i]]],
+    col=redblue100,axes=F,main=glue("{TIS[[i]]}3b, 
+                                    f{P1[[i]]}-HC(3b), Run-Order"), asp = 1)
+}
+
+par(mfrow=c(3,3), mar = c(2,3,2,0))
+for(i in 1:length(pass1a.0)){
+  plot(apply(pass1a.0.3b[[i]][order(tmp.sample1a[[i]][,2]),
+     hmo[[i]]],1,median), main = glue("{tis[[i]]}"), ylim = c(-1.5,1.5)); abline(h = 0, col = 'blue')
+}
+```
+
+### N-P Heatmap: median-centered, sd-scaled imputed, Sex-Control-Time order (3b)
+```{r}
+par(mfrow=c(3,3), mar = c(0,0,3,0))
+for(i in 1:length(pass1a.0)){
+  a[[i]] <- range(pass1a.0.3b[[i]])[1]
+  b[[i]] <- range(pass1a.0.3b[[i]])[2]
+  x <- tmp.sample1a[[i]][,3]
+  sex.type  <- ( (b[[i]] - a[[i]]) * ((x - min(x))/((max(x) - min(x)))) + a[[i]]) 
+  x <- tmp.sample1a[[i]][,4]
+  control.type <- ( (b[[i]] - a[[i]]) * ((x - min(x))/((max(x) - min(x)))) + a[[i]]) 
+  x <- as.factor(tmp.sample1a[[i]][,5]) %>% as.numeric()
+  time.type  <- ( (b[[i]] - a[[i]]) * ((x - min(x))/((max(x) - min(x)))) + a[[i]]) 
+  sidebar<-cbind(sex.type,sex.type,sex.type,sex.type,sex.type, 
+               control.type,control.type, control.type, control.type, control.type,
+               time.type, time.type, time.type, time.type, time.type)
+  image(
+    cbind(pass1a.0.3b[[i]][order(tmp.sample1a[[i]][,3],tmp.sample1a[[i]][,4],tmp.sample1a[[i]][,5]), hmo[[i]] ], 
+      sidebar[order(tmp.sample1a[[i]][,3],tmp.sample1a[[i]][,4],tmp.sample1a[[i]][,5]),]),
+      col=redblue100,axes=F,main=glue("{TIS[[i]]}2, 
+                                    f{P1[[i]]}-HC, Sex-Control-Time"), asp =1)
+}
+par(mfrow=c(3,3), mar = c(2,3,2,0))
+for(i in 1:length(pass1a.0)){
+  plot(apply(pass1a.0.3b[[i]][order(tmp.sample1a[[i]][,3],tmp.sample1a[[i]][,4],tmp.sample1a[[i]][,5]),
+     hmo[[i]]],1,median), main = glue("{tis[[i]]}"), ylim = c(-1.5,1.5)); abline(h = 0, col = 'blue')
+}
+```
+
+### Examine the sample *median* and sd distributions (3b)
+```{r}
+par(mfrow=c(3,3), mar = c(0,2,1,0))
+for(i in 1:length(pass1a.0)){
+  boxplot(data.frame(t(pass1a.0.3b[[i]])), ylim = c(-2,2), main = glue("{tis[[i]]}"), xaxt = "n")
+}
+glue("Outlier samples removed:")
+par(mfrow=c(3,3), mar = c(0,2,1,0))
+for(i in 1:length(pass1a.0)){
+  boxplot(data.frame(t(pass1a.0.3b[[i]][n.s[[i]],])), ylim = c(-2,2), main = glue("{tis[[i]]}"), xaxt = "n")
+}
+
+```
+
+### TODO (in additional script): Collect sample medians independent of run-order outliers to determine if samples should be centered and/or scaled 
+### TODO: Incorporate outlier sample removal
+### TODO: Incorporate flagged samples
+### TODO: Incorporate outlier feature removal from transformations
+
+# Save the processed data
+
+## Concatenate the Processing Decisions
+```{r}
+pass1a.0.vars <- list()
+comments <- list(NA, NA, NA,
+                 NA, NA, NA,
+                 NA, NA, NA)
+pass1a.0.vars <- data.frame()
+for(i in 1:length(pass1a.0)){
+  feature_impute[[i]] = names(feature_impute[[i]])
+  # The processing decisions
+  pass1a.0.vars <- rbind(pass1a.0.vars, data.frame(ds, site, tech, 'tis' = tis[[i]], 'NR' = NR[[i]], 'N' = N[[i]], 'P' = P[[i]], 
+                                   neg_vals, zero_vals, feature_na_filter, 'P1' = P1[[i]], 'NR1' = NR1[[i]], 
+                                   'N1' = N1[[i]], 'imputed_features' = paste(feature_impute[[i]], collapse = '; '), 
+                                   'na_vals_impute' = na_vals_impute[[i]], knn_k, 'run_var' = run_var[[i]], 
+                                   'outlier_sample_n' = outlier_sample_n[[i]], 'outlier_samples' =  paste(o.s[[i]], collapse = '; '), 
+                                   'outlier_filter' = o.f[[i]],  'internal_standards_n' = length(is[[i]]), 
+                                   'internal_standards' = paste(is[[i]], collapse = '; '), 'comments' = comments[[i]]))
+}
+
+# visualize the processing decisions
+if(knit_time){
+  pass1a.0.vars %>%
+    knitr::kable(format = "html") %>%
+    scroll_box(width = "100%", height = "100%")
+}
+```
+
+## Save the Data
+```{r}
+# pla
+pla1a.0.nr1 <- pass1a.0.nr1[[1]]
+pla1a.0.1 <- pass1a.0.1[[1]]
+pla1a.0.nr2 <- pass1a.0.nr2[[1]]
+pla1a.0.3a <- pass1a.0.3a[[1]]
+pla1a.0.3b <- pass1a.0.3b[[1]]
+pla1a.0.vars <- pass1a.0.vars[1,]
+# save the data
+save(pla1a.0.nr1, pla1a.0.1, pla1a.0.nr2, pla1a.0.3a, pla1a.0.3b, pla1a.0.vars,
+  file = glue("{WD}/data/UM-rpneg/UM_rpneg_processed_pla1a.0.RData"))
+
+# hip
+hip1a.0.nr1 <- pass1a.0.nr1[[2]]
+hip1a.0.1 <- pass1a.0.1[[2]]
+hip1a.0.nr2 <- pass1a.0.nr2[[2]]
+hip1a.0.3a <- pass1a.0.3a[[2]]
+hip1a.0.3b <- pass1a.0.3b[[2]]
+hip1a.0.vars <- pass1a.0.vars[2,]
+# save the data
+save(hip1a.0.nr1, hip1a.0.1, hip1a.0.nr2, hip1a.0.3a, hip1a.0.3b, hip1a.0.vars,
+  file = glue("{WD}/data/UM-rpneg/UM_rpneg_processed_hip1a.0.RData"))
+
+# gas
+gas1a.0.nr1 <- pass1a.0.nr1[[3]]
+gas1a.0.1 <- pass1a.0.1[[3]]
+gas1a.0.nr2 <- pass1a.0.nr2[[3]]
+gas1a.0.3a <- pass1a.0.3a[[3]]
+gas1a.0.3b <- pass1a.0.3b[[3]]
+gas1a.0.vars <- pass1a.0.vars[3,]
+# save the data
+save(gas1a.0.nr1, gas1a.0.1, gas1a.0.nr2, gas1a.0.3a, gas1a.0.3b, gas1a.0.vars,
+  file = glue("{WD}/data/UM-rpneg/UM_rpneg_processed_gas1a.0.RData"))
+
+# hrt
+hrt1a.0.nr1 <- pass1a.0.nr1[[4]]
+hrt1a.0.1 <- pass1a.0.1[[4]]
+hrt1a.0.nr2 <- pass1a.0.nr2[[4]]
+hrt1a.0.3a <- pass1a.0.3a[[4]]
+hrt1a.0.3b <- pass1a.0.3b[[4]]
+hrt1a.0.vars <- pass1a.0.vars[4,]
+# save the data
+save(hrt1a.0.nr1, hrt1a.0.1, hrt1a.0.nr2, hrt1a.0.3a, hrt1a.0.3b, hrt1a.0.vars,
+  file = glue("{WD}/data/UM-rpneg/UM_rpneg_processed_hrt1a.0.RData"))
+
+# kid
+kid1a.0.nr1 <- pass1a.0.nr1[[5]]
+kid1a.0.1 <- pass1a.0.1[[5]]
+kid1a.0.nr2 <- pass1a.0.nr2[[5]]
+kid1a.0.3a <- pass1a.0.3a[[5]]
+kid1a.0.3b <- pass1a.0.3b[[5]]
+kid1a.0.vars <- pass1a.0.vars[5,]
+# save the data
+save(kid1a.0.nr1, kid1a.0.1, kid1a.0.nr2, kid1a.0.3a, kid1a.0.3b, kid1a.0.vars,
+  file = glue("{WD}/data/UM-rpneg/UM_rpneg_processed_kid1a.0.RData"))
+
+# lun
+lun1a.0.nr1 <- pass1a.0.nr1[[6]]
+lun1a.0.1 <- pass1a.0.1[[6]]
+lun1a.0.nr2 <- pass1a.0.nr2[[6]]
+lun1a.0.3a <- pass1a.0.3a[[6]]
+lun1a.0.3b <- pass1a.0.3b[[6]]
+lun1a.0.vars <- pass1a.0.vars[6,]
+# save the data
+save(lun1a.0.nr1, lun1a.0.1, lun1a.0.nr2, lun1a.0.3a, lun1a.0.3b, lun1a.0.vars,
+  file = glue("{WD}/data/UM-rpneg/UM_rpneg_processed_lun1a.0.RData"))
+
+# liv
+liv1a.0.nr1 <- pass1a.0.nr1[[7]]
+liv1a.0.1 <- pass1a.0.1[[7]]
+liv1a.0.nr2 <- pass1a.0.nr2[[7]]
+liv1a.0.3a <- pass1a.0.3a[[7]]
+liv1a.0.3b <- pass1a.0.3b[[7]]
+liv1a.0.vars <- pass1a.0.vars[7,]
+# save the data
+save(liv1a.0.nr1, liv1a.0.1, liv1a.0.nr2, liv1a.0.3a, liv1a.0.3b, liv1a.0.vars,
+  file = glue("{WD}/data/UM-rpneg/UM_rpneg_processed_liv1a.0.RData"))
+
+# badi
+badi1a.0.nr1 <- pass1a.0.nr1[[8]]
+badi1a.0.1 <- pass1a.0.1[[8]]
+badi1a.0.nr2 <- pass1a.0.nr2[[8]]
+badi1a.0.3a <- pass1a.0.3a[[8]]
+badi1a.0.3b <- pass1a.0.3b[[8]]
+badi1a.0.vars <- pass1a.0.vars[8,]
+# save the data
+save(badi1a.0.nr1, badi1a.0.1, badi1a.0.nr2, badi1a.0.3a, badi1a.0.3b, badi1a.0.vars,
+  file = glue("{WD}/data/UM-rpneg/UM_rpneg_processed_badi1a.0.RData"))
+
+# wadi
+wadi1a.0.nr1 <- pass1a.0.nr1[[9]]
+wadi1a.0.1 <- pass1a.0.1[[9]]
+wadi1a.0.nr2 <- pass1a.0.nr2[[9]]
+wadi1a.0.3a <- pass1a.0.3a[[9]]
+wadi1a.0.3b <- pass1a.0.3b[[9]]
+wadi1a.0.vars <- pass1a.0.vars[9,]
+# save the data
+save(wadi1a.0.nr1, wadi1a.0.1, wadi1a.0.nr2, wadi1a.0.3a, wadi1a.0.3b, wadi1a.0.vars,
+  file = glue("{WD}/data/UM-rpneg/UM_rpneg_processed_wadi1a.0.RData"))
+
+# all tissues
+save(pla1a.0.nr1, pla1a.0.1, pla1a.0.nr2, pla1a.0.3a, pla1a.0.3b, pla1a.0.vars,
+     hip1a.0.nr1, hip1a.0.1, hip1a.0.nr2, hip1a.0.3a, hip1a.0.3b, hip1a.0.vars,
+     gas1a.0.nr1, gas1a.0.1, gas1a.0.nr2, gas1a.0.3a, gas1a.0.3b, gas1a.0.vars,
+     hrt1a.0.nr1, hrt1a.0.1, hrt1a.0.nr2, hrt1a.0.3a, hrt1a.0.3b, hrt1a.0.vars,
+     kid1a.0.nr1, kid1a.0.1, kid1a.0.nr2, kid1a.0.3a, kid1a.0.3b, kid1a.0.vars,
+     lun1a.0.nr1, lun1a.0.1, lun1a.0.nr2, lun1a.0.3a, lun1a.0.3b, lun1a.0.vars,
+     liv1a.0.nr1, liv1a.0.1, liv1a.0.nr2, liv1a.0.3a, liv1a.0.3b, liv1a.0.vars,
+     badi1a.0.nr1, badi1a.0.1, badi1a.0.nr2, badi1a.0.3a, badi1a.0.3b, badi1a.0.vars,
+     wadi1a.0.nr1, wadi1a.0.1, wadi1a.0.nr2, wadi1a.0.3a, wadi1a.0.3b, wadi1a.0.vars,
+  file = glue("{WD}/data/UM-rpneg/UM_rpneg_processed_pass1a.0.RData"))
+
+```
+
+# Session Info
+```{r Sesh}
+warnings()
+session_info()
+```
+
+`r knitr::knit_exit()`

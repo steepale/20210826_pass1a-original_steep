@@ -1,0 +1,538 @@
+---
+title: | 
+ | PASS1A/PASS1C Metabolomics: 
+ | UMich PASS1A (Original PASS1A) Data Structure
+author: "Alec Steep"
+date: "11/26/2021"
+always_allow_html: true
+output: 
+  html_document:
+    toc: true
+    code_folding: hide
+    highlight: zenburn
+    css: ../../style/style.css
+---
+
+# CONFIGURATIONS
+```{r setup, message=FALSE, results='hide', warning = FALSE, echo = TRUE}
+# Set the working directory and tool paths on your local computer.
+WD <- '/Users/Alec/motrpac/20210826_pass1c-umich'
+# Set the gsutil path
+
+knitr::opts_knit$set(root.dir=WD)
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(cache = FALSE)
+```
+
+##### CSS Top Styling
+```{r CSS Top Styling}
+writeLines("td, th { padding : 3px } th { background-color:white; color:black; border:1px solid black; text-align:center } td {color:black; border:1px solid black; word-wrap:break-word; white-space:nowrap; overflow: hidden; text-overflow: ellipsis; max-width:300px; text-align:left}", con=file.path(normalizePath(WD), "style/style.css"))
+```
+
+##### Overview
+
+# Prepare Environment
+
+## Setup the Environment
+```{r Setup the Environment, message=FALSE, results='hide', warning = FALSE, echo = TRUE}
+################################################################################
+##### Resources and Dependencies ###############################################
+################################################################################
+# Whether to knit document and display data
+knit_time = TRUE
+
+# Load dependencies
+pacs...man <- c("tidyverse","kableExtra","devtools","MotrpacBicQC","impute","glue")
+for(pac in pacs...man){
+  suppressWarnings(suppressPackageStartupMessages(library(pac, character.only = TRUE)))
+}
+
+#browseVignettes("MotrpacBicQC")
+############################################################
+##### Functions ############################################
+############################################################
+
+# Name functions
+select <- dplyr::select
+map <- purrr::map
+desc <- dplyr::desc
+arrange <- dplyr::arrange
+melt <- reshape2::melt
+mutate <- dplyr::mutate
+glue <- glue::glue
+
+# Global options
+options(dplyr.print_max = 100)
+options(scipen=10000)
+
+# Colors
+redblue100<-rgb(read.table(paste0(WD,'/colors/redblue100.txt'),sep='\t',row.names=1,header=T))
+```
+
+# Phenotypic Data
+
+## Adjust the Phenotype Data 
+```{r}
+# Phenotype Data (1A)
+#########################
+pheno_file <- glue("{WD}/data/20201021_pass1a-06-pheno-viallabel_steep.txt")
+pheno_df1a <- read.csv(pheno_file, header = T, sep = '\t')
+pheno_df1a <- pheno_df1a %>%
+  mutate(tissue = case_when(Specimen.Processing.sampletypedescription == 'Brown Adipose' ~ 'badi',
+                            Specimen.Processing.sampletypedescription == 'EDTA Plasma' ~ 'pla',
+                            Specimen.Processing.sampletypedescription == 'Gastrocnemius' ~ 'gas',
+                            Specimen.Processing.sampletypedescription == 'Heart' ~ 'hrt',
+                            Specimen.Processing.sampletypedescription == 'Kidney' ~ 'kid',
+                            Specimen.Processing.sampletypedescription == 'Liver' ~ 'liv',
+                            Specimen.Processing.sampletypedescription == 'Lung' ~ 'lun',
+                            Specimen.Processing.sampletypedescription == 'White Adipose' ~ 'wadi',
+                            Specimen.Processing.sampletypedescription == 'PaxGene RNA' ~ 'pax',
+                            Specimen.Processing.sampletypedescription == 'Hippocampus' ~ 'hip',
+                            Specimen.Processing.sampletypedescription == 'Cortex' ~ 'cor',
+                            Specimen.Processing.sampletypedescription == 'Hypothalamus' ~ 'hyp',
+                            Specimen.Processing.sampletypedescription == 'Vastus Lateralis' ~ 'vas',
+                            Specimen.Processing.sampletypedescription == 'Tibia' ~ 'tib',
+                            Specimen.Processing.sampletypedescription == 'Aorta' ~ 'aor',
+                            Specimen.Processing.sampletypedescription == 'Small Intestine' ~ 'sma',
+                            Specimen.Processing.sampletypedescription == 'Adrenals' ~ 'adr',
+                            Specimen.Processing.sampletypedescription == 'Colon' ~ 'col',
+                            Specimen.Processing.sampletypedescription == 'Spleen' ~ 'spl',
+                            Specimen.Processing.sampletypedescription == 'Testes' ~ 'tes',
+                            Specimen.Processing.sampletypedescription == 'Ovaries' ~ 'ova'))
+pheno_df1a$viallabel <- as.character(pheno_df1a$viallabel)
+
+# Save data
+pheno_file <- glue("{WD}/data/20211215_pass1a-06-pheno-viallabel_steep.txt")
+# write.table(pheno_df1a, file = pheno_file, quote = FALSE, sep = '\t', row.names = FALSE)
+```
+
+
+# Load Data Abundance Data
+
+## Load the PASS1A metabolomics datasets from before and create data matrices
+```{r}
+# Load the prior pass1a data (takes a few minutes)
+pass1a_nested_file <- glue("{WD}/../20200915_metabolomics-pass1a/data/20201010_pass1a-metabolomics-countdata-nested_steep.rds")
+pass1a_df <- readRDS(pass1a_nested_file)
+#dim(pass1a_df)
+#head(pass1a_df)
+```
+
+# Partition Data into NxP Matrices
+
+## Create Data Matrices (UM rppos)
+```{r}
+# Plasma
+pla_rppos_pass1a.0 <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'rppos') %>%
+  filter(TISSUE == 'plasma') %>%
+  select(COUNT_DATA) %>%
+  unnest(COUNT_DATA) %>%
+  select(viallabel, METABOLITE_NAME, VALUE) %>%
+  pivot_wider(names_from = METABOLITE_NAME, values_from = VALUE) %>%
+  column_to_rownames(var = 'viallabel') %>%
+  as.matrix()
+
+# Plasma
+hip_rppos_pass1a.0 <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'rppos') %>%
+  filter(TISSUE == 'hippocampus') %>%
+  select(COUNT_DATA) %>%
+  unnest(COUNT_DATA) %>%
+  select(viallabel, METABOLITE_NAME, VALUE) %>%
+  pivot_wider(names_from = METABOLITE_NAME, values_from = VALUE) %>%
+  column_to_rownames(var = 'viallabel') %>%
+  as.matrix()
+
+# Plasma
+gas_rppos_pass1a.0 <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'rppos') %>%
+  filter(TISSUE == 'gastrocnemius') %>%
+  select(COUNT_DATA) %>%
+  unnest(COUNT_DATA) %>%
+  select(viallabel, METABOLITE_NAME, VALUE) %>%
+  pivot_wider(names_from = METABOLITE_NAME, values_from = VALUE) %>%
+  column_to_rownames(var = 'viallabel') %>%
+  as.matrix() 
+
+# Plasma
+hrt_rppos_pass1a.0 <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'rppos') %>%
+  filter(TISSUE == 'heart') %>%
+  select(COUNT_DATA) %>%
+  unnest(COUNT_DATA) %>%
+  select(viallabel, METABOLITE_NAME, VALUE) %>%
+  pivot_wider(names_from = METABOLITE_NAME, values_from = VALUE) %>%
+  column_to_rownames(var = 'viallabel') %>%
+  as.matrix()
+
+# Plasma
+kid_rppos_pass1a.0 <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'rppos') %>%
+  filter(TISSUE == 'kidney') %>%
+  select(COUNT_DATA) %>%
+  unnest(COUNT_DATA) %>%
+  select(viallabel, METABOLITE_NAME, VALUE) %>%
+  pivot_wider(names_from = METABOLITE_NAME, values_from = VALUE) %>%
+  column_to_rownames(var = 'viallabel') %>%
+  as.matrix()
+
+# Plasma
+lun_rppos_pass1a.0 <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'rppos') %>%
+  filter(TISSUE == 'lung') %>%
+  select(COUNT_DATA) %>%
+  unnest(COUNT_DATA) %>%
+  select(viallabel, METABOLITE_NAME, VALUE) %>%
+  pivot_wider(names_from = METABOLITE_NAME, values_from = VALUE) %>%
+  column_to_rownames(var = 'viallabel') %>%
+  as.matrix()
+
+# Plasma
+liv_rppos_pass1a.0 <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'rppos') %>%
+  filter(TISSUE == 'liver') %>%
+  select(COUNT_DATA) %>%
+  unnest(COUNT_DATA) %>%
+  select(viallabel, METABOLITE_NAME, VALUE) %>%
+  pivot_wider(names_from = METABOLITE_NAME, values_from = VALUE) %>%
+  column_to_rownames(var = 'viallabel') %>%
+  as.matrix()
+
+# Plasma
+badi_rppos_pass1a.0 <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'rppos') %>%
+  filter(TISSUE == 'brown-adipose') %>%
+  select(COUNT_DATA) %>%
+  unnest(COUNT_DATA) %>%
+  select(viallabel, METABOLITE_NAME, VALUE) %>%
+  pivot_wider(names_from = METABOLITE_NAME, values_from = VALUE) %>%
+  column_to_rownames(var = 'viallabel') %>%
+  as.matrix()
+
+# Plasma
+wadi_rppos_pass1a.0 <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'rppos') %>%
+  filter(TISSUE == 'white-adipose') %>%
+  select(COUNT_DATA) %>%
+  unnest(COUNT_DATA) %>%
+  select(viallabel, METABOLITE_NAME, VALUE) %>%
+  pivot_wider(names_from = METABOLITE_NAME, values_from = VALUE) %>%
+  column_to_rownames(var = 'viallabel') %>%
+  as.matrix()
+```
+
+## Create Data Matrices (UM rpneg)
+```{r}
+# Plasma
+pla_rpneg_pass1a.0 <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'rpneg') %>%
+  filter(TISSUE == 'plasma') %>%
+  select(COUNT_DATA) %>%
+  unnest(COUNT_DATA) %>%
+  select(viallabel, METABOLITE_NAME, VALUE) %>%
+  pivot_wider(names_from = METABOLITE_NAME, values_from = VALUE) %>%
+  column_to_rownames(var = 'viallabel') %>%
+  as.matrix()
+
+# Hippocampus
+hip_rpneg_pass1a.0 <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'rpneg') %>%
+  filter(TISSUE == 'hippocampus') %>%
+  select(COUNT_DATA) %>%
+  unnest(COUNT_DATA) %>%
+  select(viallabel, METABOLITE_NAME, VALUE) %>%
+  pivot_wider(names_from = METABOLITE_NAME, values_from = VALUE) %>%
+  column_to_rownames(var = 'viallabel') %>%
+  as.matrix()
+
+# Gastrocnemius
+gas_rpneg_pass1a.0 <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'rpneg') %>%
+  filter(TISSUE == 'gastrocnemius') %>%
+  select(COUNT_DATA) %>%
+  unnest(COUNT_DATA) %>%
+  select(viallabel, METABOLITE_NAME, VALUE) %>%
+  pivot_wider(names_from = METABOLITE_NAME, values_from = VALUE) %>%
+  column_to_rownames(var = 'viallabel') %>%
+  as.matrix()
+
+# Heart
+hrt_rpneg_pass1a.0 <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'rpneg') %>%
+  filter(TISSUE == 'heart') %>%
+  select(COUNT_DATA) %>%
+  unnest(COUNT_DATA) %>%
+  select(viallabel, METABOLITE_NAME, VALUE) %>%
+  pivot_wider(names_from = METABOLITE_NAME, values_from = VALUE) %>%
+  column_to_rownames(var = 'viallabel') %>%
+  as.matrix()
+
+# Kidney
+kid_rpneg_pass1a.0 <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'rpneg') %>%
+  filter(TISSUE == 'kidney') %>%
+  select(COUNT_DATA) %>%
+  unnest(COUNT_DATA) %>%
+  select(viallabel, METABOLITE_NAME, VALUE) %>%
+  pivot_wider(names_from = METABOLITE_NAME, values_from = VALUE) %>%
+  column_to_rownames(var = 'viallabel') %>%
+  as.matrix()
+
+# Lung
+lun_rpneg_pass1a.0 <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'rpneg') %>%
+  filter(TISSUE == 'lung') %>%
+  select(COUNT_DATA) %>%
+  unnest(COUNT_DATA) %>%
+  select(viallabel, METABOLITE_NAME, VALUE) %>%
+  pivot_wider(names_from = METABOLITE_NAME, values_from = VALUE) %>%
+  column_to_rownames(var = 'viallabel') %>%
+  as.matrix()
+
+# Liver
+liv_rpneg_pass1a.0 <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'rpneg') %>%
+  filter(TISSUE == 'liver') %>%
+  select(COUNT_DATA) %>%
+  unnest(COUNT_DATA) %>%
+  select(viallabel, METABOLITE_NAME, VALUE) %>%
+  pivot_wider(names_from = METABOLITE_NAME, values_from = VALUE) %>%
+  column_to_rownames(var = 'viallabel') %>%
+  as.matrix()
+
+# Badi
+badi_rpneg_pass1a.0 <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'rpneg') %>%
+  filter(TISSUE == 'brown-adipose') %>%
+  select(COUNT_DATA) %>%
+  unnest(COUNT_DATA) %>%
+  select(viallabel, METABOLITE_NAME, VALUE) %>%
+  pivot_wider(names_from = METABOLITE_NAME, values_from = VALUE) %>%
+  column_to_rownames(var = 'viallabel') %>%
+  as.matrix()
+
+# Wadi
+wadi_rpneg_pass1a.0 <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'rpneg') %>%
+  filter(TISSUE == 'white-adipose') %>%
+  select(COUNT_DATA) %>%
+  unnest(COUNT_DATA) %>%
+  select(viallabel, METABOLITE_NAME, VALUE) %>%
+  pivot_wider(names_from = METABOLITE_NAME, values_from = VALUE) %>%
+  column_to_rownames(var = 'viallabel') %>%
+  as.matrix()
+```
+
+## Create Data Matrices (UM ionpneg)
+```{r}
+# Plasma
+pla_ionpneg_pass1a.0 <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'ionpneg') %>%
+  filter(TISSUE == 'plasma') %>%
+  select(COUNT_DATA) %>%
+  unnest(COUNT_DATA) %>%
+  select(viallabel, METABOLITE_NAME, VALUE) %>%
+  pivot_wider(names_from = METABOLITE_NAME, values_from = VALUE) %>%
+  column_to_rownames(var = 'viallabel') %>%
+  as.matrix()
+
+# hip
+hip_ionpneg_pass1a.0 <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'ionpneg') %>%
+  filter(TISSUE == 'hippocampus') %>%
+  select(COUNT_DATA) %>%
+  unnest(COUNT_DATA) %>%
+  select(viallabel, METABOLITE_NAME, VALUE) %>%
+  pivot_wider(names_from = METABOLITE_NAME, values_from = VALUE) %>%
+  column_to_rownames(var = 'viallabel') %>%
+  as.matrix()
+
+# gas
+gas_ionpneg_pass1a.0 <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'ionpneg') %>%
+  filter(TISSUE == 'gastrocnemius') %>%
+  select(COUNT_DATA) %>%
+  unnest(COUNT_DATA) %>%
+  select(viallabel, METABOLITE_NAME, VALUE) %>%
+  pivot_wider(names_from = METABOLITE_NAME, values_from = VALUE) %>%
+  column_to_rownames(var = 'viallabel') %>%
+  as.matrix()
+
+# hrt
+hrt_ionpneg_pass1a.0 <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'ionpneg') %>%
+  filter(TISSUE == 'heart') %>%
+  select(COUNT_DATA) %>%
+  unnest(COUNT_DATA) %>%
+  select(viallabel, METABOLITE_NAME, VALUE) %>%
+  pivot_wider(names_from = METABOLITE_NAME, values_from = VALUE) %>%
+  column_to_rownames(var = 'viallabel') %>%
+  as.matrix()
+
+# kid
+kid_ionpneg_pass1a.0 <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'ionpneg') %>%
+  filter(TISSUE == 'kidney') %>%
+  select(COUNT_DATA) %>%
+  unnest(COUNT_DATA) %>%
+  select(viallabel, METABOLITE_NAME, VALUE) %>%
+  pivot_wider(names_from = METABOLITE_NAME, values_from = VALUE) %>%
+  column_to_rownames(var = 'viallabel') %>%
+  as.matrix()
+
+# lun
+lun_ionpneg_pass1a.0 <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'ionpneg') %>%
+  filter(TISSUE == 'lung') %>%
+  select(COUNT_DATA) %>%
+  unnest(COUNT_DATA) %>%
+  select(viallabel, METABOLITE_NAME, VALUE) %>%
+  pivot_wider(names_from = METABOLITE_NAME, values_from = VALUE) %>%
+  column_to_rownames(var = 'viallabel') %>%
+  as.matrix()
+
+# liv
+liv_ionpneg_pass1a.0 <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'ionpneg') %>%
+  filter(TISSUE == 'liver') %>%
+  select(COUNT_DATA) %>%
+  unnest(COUNT_DATA) %>%
+  select(viallabel, METABOLITE_NAME, VALUE) %>%
+  pivot_wider(names_from = METABOLITE_NAME, values_from = VALUE) %>%
+  column_to_rownames(var = 'viallabel') %>%
+  as.matrix()
+
+# badi
+badi_ionpneg_pass1a.0 <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'ionpneg') %>%
+  filter(TISSUE == 'brown-adipose') %>%
+  select(COUNT_DATA) %>%
+  unnest(COUNT_DATA) %>%
+  select(viallabel, METABOLITE_NAME, VALUE) %>%
+  pivot_wider(names_from = METABOLITE_NAME, values_from = VALUE) %>%
+  column_to_rownames(var = 'viallabel') %>%
+  as.matrix()
+
+# wadi
+wadi_ionpneg_pass1a.0 <- pass1a_df %>%
+  filter(STUDY_INSTITUTE == 'University of Michigan') %>%
+  filter(NAMED == 'named') %>%
+  filter(DATASET == 'untargeted') %>%
+  filter(METAB_FAMILY == 'ionpneg') %>%
+  filter(TISSUE == 'white-adipose') %>%
+  select(COUNT_DATA) %>%
+  unnest(COUNT_DATA) %>%
+  select(viallabel, METABOLITE_NAME, VALUE) %>%
+  pivot_wider(names_from = METABOLITE_NAME, values_from = VALUE) %>%
+  column_to_rownames(var = 'viallabel') %>%
+  as.matrix()
+```
+
+# Save Data
+
+## Save the Matrices in .RData Files
+```{r}
+# UM-rppos
+save(pla_rppos_pass1a.0, hrt_rppos_pass1a.0, lun_rppos_pass1a.0, liv_rppos_pass1a.0,
+     gas_rppos_pass1a.0, kid_rppos_pass1a.0, wadi_rppos_pass1a.0, badi_rppos_pass1a.0,
+     hip_rppos_pass1a.0, file = glue("{WD}/data/UM-rppos/UM_rppos.0.RData"))
+
+# UM-rpneg
+save(pla_rpneg_pass1a.0, hrt_rpneg_pass1a.0, lun_rpneg_pass1a.0, liv_rpneg_pass1a.0,
+     gas_rpneg_pass1a.0, kid_rpneg_pass1a.0, wadi_rpneg_pass1a.0, badi_rpneg_pass1a.0,
+     hip_rpneg_pass1a.0, file = glue("{WD}/data/UM-rpneg/UM_rpneg.0.RData"))
+
+# UM-ionpneg
+save(pla_ionpneg_pass1a.0, hrt_ionpneg_pass1a.0, lun_ionpneg_pass1a.0, liv_ionpneg_pass1a.0,
+     gas_ionpneg_pass1a.0, kid_ionpneg_pass1a.0, wadi_ionpneg_pass1a.0, badi_ionpneg_pass1a.0,
+     hip_ionpneg_pass1a.0, file = glue("{WD}/data/UM-ionpneg/UM_ionpneg.0.RData"))
+```
+
+# Session Info
+```{r Sesh}
+warnings()
+session_info()
+```
+
+`r knitr::knit_exit()`

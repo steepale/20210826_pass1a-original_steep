@@ -1,0 +1,2836 @@
+---
+title: | 
+ | PASS1A/PASS1C Metabolomics: 
+ | Sample Medians--rppos pass1a (pass1a 1.0 post-IS)
+author: "Alec Steep, Jun Li"
+date: "12/13/2021"
+always_allow_html: true
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    code_folding: hide
+    highlight: zenburn
+    css: ../../style/style.css
+---
+
+# CONFIGURATIONS
+```{r setup, message=FALSE, results='hide', warning = FALSE, echo = TRUE}
+# Set the working directory and tool paths on your local computer.
+WD <- '/Users/Alec/motrpac/20210826_pass1c-umich'
+# Set the gsutil path
+
+knitr::opts_knit$set(root.dir=WD)
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(cache = FALSE)
+```
+
+##### CSS Top Styling
+```{r CSS Top Styling}
+write_css = TRUE
+if(write_css){
+  writeLines("td, th { padding : 3px } th { background-color:white; color:black; border:1px solid black; text-align:center } td {color:black; border:1px solid black; word-wrap:break-word; white-space:nowrap; overflow: hidden; text-overflow: ellipsis; max-width:300px; text-align:left}", con=file.path(normalizePath(WD), "style/style.css"))
+}
+```
+
+##### Overview
+
+##### Goals of Analysis
+- Determine if samples appear to have different amounts of biological samples
+
+# Prepare Environment & Load Data
+
+## Setup the Environment
+```{r Setup the Environment, message=FALSE, results='hide', warning = FALSE, echo = TRUE}
+################################################################################
+##### Resources and Dependencies ###############################################
+################################################################################
+# Whether to knit document and display data
+knit_time = TRUE
+
+# Load dependencies
+pacs...man <- c("tidyverse","kableExtra","devtools","MotrpacBicQC","impute","glue",
+                "rethinking","corrplot")
+for(pac in pacs...man){
+  suppressWarnings(suppressPackageStartupMessages(library(pac, character.only = TRUE)))
+}
+
+#browseVignettes("MotrpacBicQC")
+############################################################
+##### Functions ############################################
+############################################################
+
+# Name functions
+select <- dplyr::select
+map <- purrr::map
+desc <- dplyr::desc
+arrange <- dplyr::arrange
+melt <- reshape2::melt
+mutate <- dplyr::mutate
+glue <- glue::glue
+
+# Global options
+options(dplyr.print_max = 100)
+options(scipen=10000)
+
+# Colors
+redblue100<-rgb(read.table(paste0(WD,'/colors/redblue100.txt'),sep='\t',row.names=1,header=T))
+```
+
+## Source Functions
+```{r}
+source(glue("{WD}/functions/cor.mtest.R"))
+source(glue("{WD}/functions/rotate.R"))
+```
+
+## Log Variables (1)
+```{r}
+ds1 <- 'pass1a'
+ds2 <- 'pass1c'
+site <- 'umich'
+TIS <- list('PLA', 'HIP', 'GAS', 'HRT', 'KID', 'LUN', 'LIV', 'BADI', 'WADI')
+tis <- list('pla', 'hip', 'gas', 'hrt', 'kid', 'lun', 'liv', 'badi', 'wadi')
+```
+
+## Load Data and Metadata
+
+### Load Phenotypes Data
+```{r}
+# Phenotype Data (1A)
+#########################
+pheno_file <- glue("{WD}/data/20201021_pass1a-06-pheno-viallabel_steep.txt")
+pheno_df1a <- read.csv(pheno_file, header = T, sep = '\t')
+pheno_df1a <- pheno_df1a %>%
+  mutate(tissue = case_when(Specimen.Processing.sampletypedescription == 'Brown Adipose' ~ 'badi',
+                            Specimen.Processing.sampletypedescription == 'EDTA Plasma' ~ 'pla',
+                            Specimen.Processing.sampletypedescription == 'Gastrocnemius' ~ 'gas',
+                            Specimen.Processing.sampletypedescription == 'Heart' ~ 'hrt',
+                            Specimen.Processing.sampletypedescription == 'Kidney' ~ 'kid',
+                            Specimen.Processing.sampletypedescription == 'Liver' ~ 'liv',
+                            Specimen.Processing.sampletypedescription == 'Lung' ~ 'lun',
+                            Specimen.Processing.sampletypedescription == 'White Adipose' ~ 'wadi',
+                            Specimen.Processing.sampletypedescription == 'PaxGene RNA' ~ 'pax',
+                            Specimen.Processing.sampletypedescription == 'Hippocampus' ~ 'hip',
+                            Specimen.Processing.sampletypedescription == 'Cortex' ~ 'cor',
+                            Specimen.Processing.sampletypedescription == 'Hypothalamus' ~ 'hyp',
+                            Specimen.Processing.sampletypedescription == 'Vastus Lateralis' ~ 'vas',
+                            Specimen.Processing.sampletypedescription == 'Tibia' ~ 'tib',
+                            Specimen.Processing.sampletypedescription == 'Aorta' ~ 'aor',
+                            Specimen.Processing.sampletypedescription == 'Small Intestine' ~ 'sma',
+                            Specimen.Processing.sampletypedescription == 'Adrenals' ~ 'adr',
+                            Specimen.Processing.sampletypedescription == 'Colon' ~ 'col',
+                            Specimen.Processing.sampletypedescription == 'Spleen' ~ 'spl',
+                            Specimen.Processing.sampletypedescription == 'Testes' ~ 'tes',
+                            Specimen.Processing.sampletypedescription == 'Ovaries' ~ 'ova'))
+
+# Phenotype Data (1C)
+#########################
+pheno_file <- glue("{WD}/data/EX01117_PASS1C_phenotypic_data.txt")
+pheno_df1c <- read.csv(pheno_file, header = T, sep = '\t')
+pheno_df1c <- pheno_df1c %>%
+  mutate(tissue = case_when(sampleTypeCode == 69 ~ 'badi',
+                            sampleTypeCode == 31 ~ 'pla',
+                            sampleTypeCode == 55 ~ 'gas',
+                            sampleTypeCode == 58 ~ 'hrt',
+                            sampleTypeCode == 59 ~ 'kid',
+                            sampleTypeCode == 68 ~ 'liv',
+                            sampleTypeCode == 66 ~ 'lun',
+                            sampleTypeCode == 70 ~ 'wadi'))
+```
+
+### Load the sample order files
+```{r}
+#created in 20211211_all-rppos-pass1a-eda_steep.Rmd file
+
+# Load the rppos sample order matrices
+load(file = glue("{WD}/data/UM-rppos/rppos_pass1a.0.order.RData"))
+load(file = glue("{WD}/data/UM-rpneg/rpneg_pass1a.0.order.RData"))
+load(file = glue("{WD}/data/UM-ionpneg/ionpneg_pass1a.0.order.RData"))
+
+# Create a list of annotation matrixes
+rppos_pass1a.0.order <- list(pla_rppos_pass1a.0.order, hip_rppos_pass1a.0.order, gas_rppos_pass1a.0.order, 
+                 hrt_rppos_pass1a.0.order, kid_rppos_pass1a.0.order, lun_rppos_pass1a.0.order, 
+                 liv_rppos_pass1a.0.order, badi_rppos_pass1a.0.order, wadi_rppos_pass1a.0.order)
+rpneg_pass1a.0.order <- list(pla_rpneg_pass1a.0.order, hip_rpneg_pass1a.0.order, gas_rpneg_pass1a.0.order, 
+                 hrt_rpneg_pass1a.0.order, kid_rpneg_pass1a.0.order, lun_rpneg_pass1a.0.order, 
+                 liv_rpneg_pass1a.0.order, badi_rpneg_pass1a.0.order, wadi_rpneg_pass1a.0.order)
+ionpneg_pass1a.0.order <- list(pla_ionpneg_pass1a.0.order, hip_ionpneg_pass1a.0.order, gas_ionpneg_pass1a.0.order, 
+                 hrt_ionpneg_pass1a.0.order, kid_ionpneg_pass1a.0.order, lun_ionpneg_pass1a.0.order, 
+                 liv_ionpneg_pass1a.0.order, badi_ionpneg_pass1a.0.order, wadi_ionpneg_pass1a.0.order)
+
+```
+
+### Create the sample annotation dataframes
+```{r}
+rppos_pass1a.0.order2 <- rpneg_pass1a.0.order2 <- ionpneg_pass1a.0.order2 <-  list()
+i <- 1
+for(i in 1:length(rppos_pass1a.0.order)){
+  rppos_pass1a.0.order2[[i]] <- rppos_pass1a.0.order[[i]] %>%
+    filter(str_sub(sample_id,1,1) == 9) %>%
+    mutate(control = ifelse(grepl('Control', Key.anirandgroup), 1, 0)) %>%
+    mutate(time = case_when(grepl('IPE', Key.anirandgroup) ~ 0,
+                          grepl('0 hr', Key.anirandgroup) ~ 0,
+                          grepl('0.5 hr', Key.anirandgroup) ~ 0.5,
+                          grepl('1 hr', Key.anirandgroup) ~ 1,
+                          grepl('4 hr', Key.anirandgroup) ~ 4,
+                          grepl('7 hr', Key.anirandgroup) ~ 7,
+                          grepl('24 hr', Key.anirandgroup) ~ 24,
+                          grepl('48 hr', Key.anirandgroup) ~ 48)) %>%
+    mutate(sex = Registration.sex) %>%
+    mutate(bid = str_sub(sample_id,1,5) %>% as.integer()) %>%
+    select(bid,sample_order,sex,control,time) %>%
+    arrange(bid) %>% as.matrix()
+}
+for(i in 1:length(rpneg_pass1a.0.order)){
+  rpneg_pass1a.0.order2[[i]] <- rpneg_pass1a.0.order[[i]] %>%
+    filter(str_sub(sample_id,1,1) == 9) %>%
+    mutate(control = ifelse(grepl('Control', Key.anirandgroup), 1, 0)) %>%
+    mutate(time = case_when(grepl('IPE', Key.anirandgroup) ~ 0,
+                          grepl('0 hr', Key.anirandgroup) ~ 0,
+                          grepl('0.5 hr', Key.anirandgroup) ~ 0.5,
+                          grepl('1 hr', Key.anirandgroup) ~ 1,
+                          grepl('4 hr', Key.anirandgroup) ~ 4,
+                          grepl('7 hr', Key.anirandgroup) ~ 7,
+                          grepl('24 hr', Key.anirandgroup) ~ 24,
+                          grepl('48 hr', Key.anirandgroup) ~ 48)) %>%
+    mutate(sex = Registration.sex) %>%
+    mutate(bid = str_sub(sample_id,1,5) %>% as.integer()) %>%
+    select(bid,sample_order,sex,control,time) %>%
+    arrange(bid) %>% as.matrix()
+}
+for(i in 1:length(rppos_pass1a.0.order)){
+  ionpneg_pass1a.0.order2[[i]] <- ionpneg_pass1a.0.order[[i]] %>%
+    filter(str_sub(sample_id,1,1) == 9) %>%
+    mutate(control = ifelse(grepl('Control', Key.anirandgroup), 1, 0)) %>%
+    mutate(time = case_when(grepl('IPE', Key.anirandgroup) ~ 0,
+                          grepl('0 hr', Key.anirandgroup) ~ 0,
+                          grepl('0.5 hr', Key.anirandgroup) ~ 0.5,
+                          grepl('1 hr', Key.anirandgroup) ~ 1,
+                          grepl('4 hr', Key.anirandgroup) ~ 4,
+                          grepl('7 hr', Key.anirandgroup) ~ 7,
+                          grepl('24 hr', Key.anirandgroup) ~ 24,
+                          grepl('48 hr', Key.anirandgroup) ~ 48)) %>%
+    mutate(sex = Registration.sex) %>%
+    mutate(bid = str_sub(sample_id,1,5) %>% as.integer()) %>%
+    select(bid,sample_order,sex,control,time) %>%
+    arrange(bid) %>% as.matrix()
+}
+```
+
+### Create the time-, control-, sex-specific matrices
+```{r}
+# # pass1a
+pla1a.0.sct <- rppos_pass1a.0.order2[[1]][,c(1,3:5)]
+row.names(pla1a.0.sct) <- rppos_pass1a.0.order2[[1]][,1]
+hip1a.0.sct <- rppos_pass1a.0.order2[[2]][,c(1,3:5)]
+row.names(hip1a.0.sct) <- rppos_pass1a.0.order2[[2]][,1]
+gas1a.0.sct <- rppos_pass1a.0.order2[[3]][,c(1,3:5)]
+row.names(gas1a.0.sct) <- rppos_pass1a.0.order2[[3]][,1]
+hrt1a.0.sct <- rppos_pass1a.0.order2[[4]][,c(1,3:5)]
+row.names(hrt1a.0.sct) <- rppos_pass1a.0.order2[[4]][,1]
+kid1a.0.sct <- rppos_pass1a.0.order2[[5]][,c(1,3:5)]
+row.names(kid1a.0.sct) <- rppos_pass1a.0.order2[[5]][,1]
+lun1a.0.sct <- rppos_pass1a.0.order2[[6]][,c(1,3:5)]
+row.names(lun1a.0.sct) <- rppos_pass1a.0.order2[[6]][,1]
+liv1a.0.sct <- rppos_pass1a.0.order2[[7]][,c(1,3:5)]
+row.names(liv1a.0.sct) <- rppos_pass1a.0.order2[[7]][,1]
+badi1a.0.sct <- rppos_pass1a.0.order2[[8]][,c(1,3:5)]
+row.names(badi1a.0.sct) <- rppos_pass1a.0.order2[[8]][,1]
+wadi1a.0.sct <- rppos_pass1a.0.order2[[9]][,c(1,3:5)]
+row.names(wadi1a.0.sct) <- rppos_pass1a.0.order2[[9]][,1]
+# 
+# # pass1c
+# gas1c.sct <- (sample.order2 %>% filter((dataset == 'pass1c') & (tissue == 'gas')))[,c(4,6:8)] %>% unique() %>% arrange(bid) %>% as.matrix()
+# kid1c.sct <- (sample.order2 %>% filter((dataset == 'pass1c') & (tissue == 'kid')))[,c(4,6:8)] %>% unique() %>% arrange(bid) %>% as.matrix()
+# wadi1c.sct <- (sample.order2 %>% filter((dataset == 'pass1c') & (tissue == 'wadi')))[,c(4,6:8)] %>% unique() %>% arrange(bid) %>% as.matrix()
+# liv1c.sct <- (sample.order2 %>% filter((dataset == 'pass1c') & (tissue == 'liv')))[,c(4,6:8)] %>% unique() %>% arrange(bid) %>% as.matrix()
+# hrt1c.sct <- (sample.order2 %>% filter((dataset == 'pass1c') & (tissue == 'hrt')))[,c(4,6:8)] %>% unique() %>% arrange(bid) %>% as.matrix()
+# lun1c.sct <- (sample.order2 %>% filter((dataset == 'pass1c') & (tissue == 'lun')))[,c(4,6:8)] %>% unique() %>% arrange(bid) %>% as.matrix()
+# pla1c.sct <- (sample.order2 %>% filter((dataset == 'pass1c') & (tissue == 'pla')))[,c(4,6:8)] %>% unique() %>% arrange(bid) %>% as.matrix()
+```
+
+
+### Load the abundance matrices as .RData files
+```{r, message=FALSE, results='hide', warning = FALSE, echo = TRUE}
+# UM-rppos (pass1a)
+# objects: gas1a.nr1, gas1a.1, gas1a.nr2, gas1a3a, gas1a3b, gas1a_vars
+load(file = glue("{WD}/data/UM-rppos/UM_rppos_processed_gas1a.0.0.RData"))
+load(file = glue("{WD}/data/UM-rppos/UM_rppos_processed_kid1a.0.0.RData"))
+load(file = glue("{WD}/data/UM-rppos/UM_rppos_processed_wadi1a.0.0.RData"))
+load(file = glue("{WD}/data/UM-rppos/UM_rppos_processed_liv1a.0.0.RData"))
+load(file = glue("{WD}/data/UM-rppos/UM_rppos_processed_hrt1a.0.0.RData"))
+load(file = glue("{WD}/data/UM-rppos/UM_rppos_processed_lun1a.0.0.RData"))
+load(file = glue("{WD}/data/UM-rppos/UM_rppos_processed_pla1a.0.0.RData"))
+load(file = glue("{WD}/data/UM-rppos/UM_rppos_processed_hip1a.0.0.RData"))
+load(file = glue("{WD}/data/UM-rppos/UM_rppos_processed_badi1a.0.0.RData"))
+# UM-rppos (pass1c)
+# # objects: gas1c.nr1, gas1c.1, gas1c.nr2, gas1c3a, gas1c3b, gas1c_vars
+# load(file = glue("{WD}/data/UM-rppos/UM_rppos_processed_gas1c.0.0.RData"))
+# load(file = glue("{WD}/data/UM-rppos/UM_rppos_processed_kid1c.0.0.RData"))
+# load(file = glue("{WD}/data/UM-rppos/UM_rppos_processed_wadi1c.0.0.RData"))
+# load(file = glue("{WD}/data/UM-rppos/UM_rppos_processed_liv1c.0.0.RData"))
+# load(file = glue("{WD}/data/UM-rppos/UM_rppos_processed_hrt1c.0.0.RData"))
+# load(file = glue("{WD}/data/UM-rppos/UM_rppos_processed_lun1c.0.0.RData"))
+# load(file = glue("{WD}/data/UM-rppos/UM_rppos_processed_pla1c.0.0.RData"))
+# rename the log2 transforms (pass1a)
+gas1a.0.nr2.rppos <- gas1a.0.nr2
+kid1a.0.nr2.rppos <- kid1a.0.nr2
+wadi1a.0.nr2.rppos <- wadi1a.0.nr2
+liv1a.0.nr2.rppos <- liv1a.0.nr2
+hrt1a.0.nr2.rppos <- hrt1a.0.nr2
+lun1a.0.nr2.rppos <- lun1a.0.nr2
+pla1a.0.nr2.rppos <- pla1a.0.nr2
+hip1a.0.nr2.rppos <- hip1a.0.nr2
+badi1a.0.nr2.rppos <- badi1a.0.nr2
+# # rename the log2 transforms (pass1c)
+# gas1c.nr2.rppos <- gas1c.nr2
+# kid1c.nr2.rppos <- kid1c.nr2
+# wadi1c.nr2.rppos <- wadi1c.nr2
+# liv1c.nr2.rppos <- liv1c.nr2
+# hrt1c.nr2.rppos <- hrt1c.nr2
+# lun1c.nr2.rppos <- lun1c.nr2
+# pla1c.nr2.rppos <- pla1c.nr2
+
+# UM-rpneg (pass1a)
+# objects: gas1a.nr1, gas1a.1, gas1a.nr2, gas1a3a, gas1a3b, gas1a_vars
+load(file = glue("{WD}/data/UM-rpneg/UM_rpneg_processed_gas1a.0.0.RData"))
+load(file = glue("{WD}/data/UM-rpneg/UM_rpneg_processed_kid1a.0.0.RData"))
+load(file = glue("{WD}/data/UM-rpneg/UM_rpneg_processed_wadi1a.0.0.RData"))
+load(file = glue("{WD}/data/UM-rpneg/UM_rpneg_processed_liv1a.0.0.RData"))
+load(file = glue("{WD}/data/UM-rpneg/UM_rpneg_processed_hrt1a.0.0.RData"))
+load(file = glue("{WD}/data/UM-rpneg/UM_rpneg_processed_lun1a.0.0.RData"))
+load(file = glue("{WD}/data/UM-rpneg/UM_rpneg_processed_pla1a.0.0.RData"))
+load(file = glue("{WD}/data/UM-rpneg/UM_rpneg_processed_hip1a.0.0.RData"))
+load(file = glue("{WD}/data/UM-rpneg/UM_rpneg_processed_badi1a.0.0.RData"))
+# # UM-rpneg (pass1c)
+# # objects: gas1c.nr1, gas1c.1, gas1c.nr2, gas1c3a, gas1c3b, gas1c_vars
+# load(file = glue("{WD}/data/UM-rpneg/UM_rpneg_processed_gas1c.0.0.RData"))
+# load(file = glue("{WD}/data/UM-rpneg/UM_rpneg_processed_kid1c.0.0.RData"))
+# load(file = glue("{WD}/data/UM-rpneg/UM_rpneg_processed_wadi1c.0.0.RData"))
+# load(file = glue("{WD}/data/UM-rpneg/UM_rpneg_processed_liv1c.0.0.RData"))
+# load(file = glue("{WD}/data/UM-rpneg/UM_rpneg_processed_hrt1c.0.0.RData"))
+# load(file = glue("{WD}/data/UM-rpneg/UM_rpneg_processed_lun1c.0.0.RData"))
+# load(file = glue("{WD}/data/UM-rpneg/UM_rpneg_processed_pla1c.0.0.RData"))
+# rename the log2 transforms (pass1a)
+gas1a.0.nr2.rpneg <- gas1a.0.nr2
+kid1a.0.nr2.rpneg <- kid1a.0.nr2
+wadi1a.0.nr2.rpneg <- wadi1a.0.nr2
+liv1a.0.nr2.rpneg <- liv1a.0.nr2
+hrt1a.0.nr2.rpneg <- hrt1a.0.nr2
+lun1a.0.nr2.rpneg <- lun1a.0.nr2
+pla1a.0.nr2.rpneg <- pla1a.0.nr2
+hip1a.0.nr2.rpneg <- hip1a.0.nr2
+badi1a.0.nr2.rpneg <- badi1a.0.nr2
+# # rename the log2 transforms (pass1c)
+# gas1c.nr2.rpneg <- gas1c.nr2
+# kid1c.nr2.rpneg <- kid1c.nr2
+# wadi1c.nr2.rpneg <- wadi1c.nr2
+# liv1c.nr2.rpneg <- liv1c.nr2
+# hrt1c.nr2.rpneg <- hrt1c.nr2
+# lun1c.nr2.rpneg <- lun1c.nr2
+# pla1c.nr2.rpneg <- pla1c.nr2
+
+# UM-ionpneg (pass1a)
+# objects: gas1a.nr1, gas1a.1, gas1a.nr2, gas1a3a, gas1a3b, gas1a_vars
+load(file = glue("{WD}/data/UM-ionpneg/UM_ionpneg_processed_gas1a.0.0.RData"))
+load(file = glue("{WD}/data/UM-ionpneg/UM_ionpneg_processed_kid1a.0.0.RData"))
+load(file = glue("{WD}/data/UM-ionpneg/UM_ionpneg_processed_wadi1a.0.0.RData"))
+load(file = glue("{WD}/data/UM-ionpneg/UM_ionpneg_processed_badi1a.0.0.RData"))
+load(file = glue("{WD}/data/UM-ionpneg/UM_ionpneg_processed_liv1a.0.0.RData"))
+load(file = glue("{WD}/data/UM-ionpneg/UM_ionpneg_processed_hrt1a.0.0.RData"))
+load(file = glue("{WD}/data/UM-ionpneg/UM_ionpneg_processed_lun1a.0.0.RData"))
+load(file = glue("{WD}/data/UM-ionpneg/UM_ionpneg_processed_pla1a.0.0.RData"))
+load(file = glue("{WD}/data/UM-ionpneg/UM_ionpneg_processed_hip1a.0.0.RData"))
+# # UM-ionpneg (pass1c)
+# # objects: gas1c.nr1, gas1c.1, gas1c.nr2, gas1c3a, gas1c3b, gas1c_vars
+# load(file = glue("{WD}/data/UM-ionpneg/UM_ionpneg_processed_gas1c.0.0.RData"))
+# load(file = glue("{WD}/data/UM-ionpneg/UM_ionpneg_processed_kid1c.0.0.RData"))
+# load(file = glue("{WD}/data/UM-ionpneg/UM_ionpneg_processed_wadi1c.0.0.RData"))
+# load(file = glue("{WD}/data/UM-ionpneg/UM_ionpneg_processed_badi1c.0.0.RData"))
+# load(file = glue("{WD}/data/UM-ionpneg/UM_ionpneg_processed_liv1c.0.0.RData"))
+# load(file = glue("{WD}/data/UM-ionpneg/UM_ionpneg_processed_hrt1c.0.0.RData"))
+# load(file = glue("{WD}/data/UM-ionpneg/UM_ionpneg_processed_lun1c.0.0.RData"))
+# load(file = glue("{WD}/data/UM-ionpneg/UM_ionpneg_processed_pla1c.0.0.RData"))
+# rename the log2 transforms (pass1a)
+gas1a.0.nr2.ionpneg <- gas1a.0.nr2
+kid1a.0.nr2.ionpneg <- kid1a.0.nr2
+wadi1a.0.nr2.ionpneg <- wadi1a.0.nr2
+badi1a.0.nr2.ionpneg <- badi1a.0.nr2
+liv1a.0.nr2.ionpneg <- liv1a.0.nr2
+hrt1a.0.nr2.ionpneg <- hrt1a.0.nr2
+lun1a.0.nr2.ionpneg <- lun1a.0.nr2
+pla1a.0.nr2.ionpneg <- pla1a.0.nr2
+hip1a.0.nr2.ionpneg <- hip1a.0.nr2
+# # rename the log2 transforms (pass1c)
+# gas1c.nr2.ionpneg <- gas1c.nr2
+# kid1c.nr2.ionpneg <- kid1c.nr2
+# wadi1c.nr2.ionpneg <- wadi1c.nr2
+# badi1c.nr2.ionpneg <- badi1c.nr2
+# liv1c.nr2.ionpneg <- liv1c.nr2
+# hrt1c.nr2.ionpneg <- hrt1c.nr2
+# lun1c.nr2.ionpneg <- lun1c.nr2
+# pla1c.nr2.ionpneg <- pla1c.nr2
+```
+
+### Calculate sample medians
+```{r}
+# rppos (pass1a)
+gas1a.0.nr2.rppos.med <- apply(gas1a.0.nr2.rppos,1,median) %>% round(digits = 3)
+kid1a.0.nr2.rppos.med <- apply(kid1a.0.nr2.rppos,1,median) %>% round(digits = 3)
+wadi1a.0.nr2.rppos.med <- apply(wadi1a.0.nr2.rppos,1,median) %>% round(digits = 3)
+liv1a.0.nr2.rppos.med <- apply(liv1a.0.nr2.rppos,1,median) %>% round(digits = 3)
+hrt1a.0.nr2.rppos.med <- apply(hrt1a.0.nr2.rppos,1,median) %>% round(digits = 3)
+lun1a.0.nr2.rppos.med <- apply(lun1a.0.nr2.rppos,1,median) %>% round(digits = 3)
+pla1a.0.nr2.rppos.med <- apply(pla1a.0.nr2.rppos,1,median) %>% round(digits = 3)
+hip1a.0.nr2.rppos.med <- apply(hip1a.0.nr2.rppos,1,median) %>% round(digits = 3)
+badi1a.0.nr2.rppos.med <- apply(badi1a.0.nr2.rppos,1,median) %>% round(digits = 3)
+
+# # rppos (pass1c)
+# gas1c.nr2.rppos.med <- apply(gas1c.nr2.rppos,1,median) %>% round(digits = 3)
+# kid1c.nr2.rppos.med <- apply(kid1c.nr2.rppos,1,median) %>% round(digits = 3)
+# wadi1c.nr2.rppos.med <- apply(wadi1c.nr2.rppos,1,median) %>% round(digits = 3)
+# liv1c.nr2.rppos.med <- apply(liv1c.nr2.rppos,1,median) %>% round(digits = 3)
+# hrt1c.nr2.rppos.med <- apply(hrt1c.nr2.rppos,1,median) %>% round(digits = 3)
+# lun1c.nr2.rppos.med <- apply(lun1c.nr2.rppos,1,median) %>% round(digits = 3)
+# pla1c.nr2.rppos.med <- apply(pla1c.nr2.rppos,1,median) %>% round(digits = 3)
+
+# rpneg (pass1a)
+gas1a.0.nr2.rpneg.med <- apply(gas1a.0.nr2.rpneg,1,median) %>% round(digits = 3)
+kid1a.0.nr2.rpneg.med <- apply(kid1a.0.nr2.rpneg,1,median) %>% round(digits = 3)
+wadi1a.0.nr2.rpneg.med <- apply(wadi1a.0.nr2.rpneg,1,median) %>% round(digits = 3)
+liv1a.0.nr2.rpneg.med <- apply(liv1a.0.nr2.rpneg,1,median) %>% round(digits = 3)
+hrt1a.0.nr2.rpneg.med <- apply(hrt1a.0.nr2.rpneg,1,median) %>% round(digits = 3)
+lun1a.0.nr2.rpneg.med <- apply(lun1a.0.nr2.rpneg,1,median) %>% round(digits = 3)
+pla1a.0.nr2.rpneg.med <- apply(pla1a.0.nr2.rpneg,1,median) %>% round(digits = 3)
+hip1a.0.nr2.rpneg.med <- apply(hip1a.0.nr2.rpneg,1,median) %>% round(digits = 3)
+badi1a.0.nr2.rpneg.med <- apply(badi1a.0.nr2.rpneg,1,median) %>% round(digits = 3)
+
+# # rpneg (pass1c)
+# gas1c.nr2.rpneg.med <- apply(gas1c.nr2.rpneg,1,median) %>% round(digits = 3)
+# kid1c.nr2.rpneg.med <- apply(kid1c.nr2.rpneg,1,median) %>% round(digits = 3)
+# wadi1c.nr2.rpneg.med <- apply(wadi1c.nr2.rpneg,1,median) %>% round(digits = 3)
+# liv1c.nr2.rpneg.med <- apply(liv1c.nr2.rpneg,1,median) %>% round(digits = 3)
+# hrt1c.nr2.rpneg.med <- apply(hrt1c.nr2.rpneg,1,median) %>% round(digits = 3)
+# lun1c.nr2.rpneg.med <- apply(lun1c.nr2.rpneg,1,median) %>% round(digits = 3)
+# pla1c.nr2.rpneg.med <- apply(pla1c.nr2.rpneg,1,median) %>% round(digits = 3)
+
+# ionpneg (pass1a)
+gas1a.0.nr2.ionpneg.med <- apply(gas1a.0.nr2.ionpneg,1,median) %>% round(digits = 3)
+kid1a.0.nr2.ionpneg.med <- apply(kid1a.0.nr2.ionpneg,1,median) %>% round(digits = 3)
+wadi1a.0.nr2.ionpneg.med <- apply(wadi1a.0.nr2.ionpneg,1,median) %>% round(digits = 3)
+liv1a.0.nr2.ionpneg.med <- apply(liv1a.0.nr2.ionpneg,1,median) %>% round(digits = 3)
+hrt1a.0.nr2.ionpneg.med <- apply(hrt1a.0.nr2.ionpneg,1,median) %>% round(digits = 3)
+lun1a.0.nr2.ionpneg.med <- apply(lun1a.0.nr2.ionpneg,1,median) %>% round(digits = 3)
+pla1a.0.nr2.ionpneg.med <- apply(pla1a.0.nr2.ionpneg,1,median) %>% round(digits = 3)
+hip1a.0.nr2.ionpneg.med <- apply(hip1a.0.nr2.ionpneg,1,median) %>% round(digits = 3)
+badi1a.0.nr2.ionpneg.med <- apply(badi1a.0.nr2.ionpneg,1,median) %>% round(digits = 3)
+
+# # ionpneg (pass1c)
+# gas1c.nr2.ionpneg.med <- apply(gas1c.nr2.ionpneg,1,median) %>% round(digits = 3)
+# kid1c.nr2.ionpneg.med <- apply(kid1c.nr2.ionpneg,1,median) %>% round(digits = 3)
+# wadi1c.nr2.ionpneg.med <- apply(wadi1c.nr2.ionpneg,1,median) %>% round(digits = 3)
+# liv1c.nr2.ionpneg.med <- apply(liv1c.nr2.ionpneg,1,median) %>% round(digits = 3)
+# hrt1c.nr2.ionpneg.med <- apply(hrt1c.nr2.ionpneg,1,median) %>% round(digits = 3)
+# lun1c.nr2.ionpneg.med <- apply(lun1c.nr2.ionpneg,1,median) %>% round(digits = 3)
+# pla1c.nr2.ionpneg.med <- apply(pla1c.nr2.ionpneg,1,median) %>% round(digits = 3)
+```
+
+### Convert sample medians identifiers to bid
+```{r}
+# rppos (pass1a)
+names(gas1a.0.nr2.rppos.med) <- str_sub(names(gas1a.0.nr2.rppos.med), 1, 5)
+names(kid1a.0.nr2.rppos.med) <- str_sub(names(kid1a.0.nr2.rppos.med), 1, 5)
+names(wadi1a.0.nr2.rppos.med) <- str_sub(names(wadi1a.0.nr2.rppos.med), 1, 5)
+names(liv1a.0.nr2.rppos.med) <- str_sub(names(liv1a.0.nr2.rppos.med), 1, 5)
+names(hrt1a.0.nr2.rppos.med) <- str_sub(names(hrt1a.0.nr2.rppos.med), 1, 5)
+names(lun1a.0.nr2.rppos.med) <- str_sub(names(lun1a.0.nr2.rppos.med), 1, 5)
+names(pla1a.0.nr2.rppos.med) <- str_sub(names(pla1a.0.nr2.rppos.med), 1, 5)
+names(hip1a.0.nr2.rppos.med) <- str_sub(names(hip1a.0.nr2.rppos.med), 1, 5)
+names(badi1a.0.nr2.rppos.med) <- str_sub(names(badi1a.0.nr2.rppos.med), 1, 5)
+
+# # rppos (pass1c)
+# names(gas1c.nr2.rppos.med) <- str_sub(names(gas1c.nr2.rppos.med), 1, 5)
+# names(kid1c.nr2.rppos.med) <- str_sub(names(kid1c.nr2.rppos.med), 1, 5)
+# names(wadi1c.nr2.rppos.med) <- str_sub(names(wadi1c.nr2.rppos.med), 1, 5)
+# names(liv1c.nr2.rppos.med) <- str_sub(names(liv1c.nr2.rppos.med), 1, 5)
+# names(hrt1c.nr2.rppos.med) <- str_sub(names(hrt1c.nr2.rppos.med), 1, 5)
+# names(lun1c.nr2.rppos.med) <- str_sub(names(lun1c.nr2.rppos.med), 1, 5)
+# names(pla1c.nr2.rppos.med) <- str_sub(names(pla1c.nr2.rppos.med), 1, 5)
+
+# rpneg (pass1a)
+names(gas1a.0.nr2.rpneg.med) <- str_sub(names(gas1a.0.nr2.rpneg.med), 1, 5)
+names(kid1a.0.nr2.rpneg.med) <- str_sub(names(kid1a.0.nr2.rpneg.med), 1, 5)
+names(wadi1a.0.nr2.rpneg.med) <- str_sub(names(wadi1a.0.nr2.rpneg.med), 1, 5)
+names(liv1a.0.nr2.rpneg.med) <- str_sub(names(liv1a.0.nr2.rpneg.med), 1, 5)
+names(hrt1a.0.nr2.rpneg.med) <- str_sub(names(hrt1a.0.nr2.rpneg.med), 1, 5)
+names(lun1a.0.nr2.rpneg.med) <- str_sub(names(lun1a.0.nr2.rpneg.med), 1, 5)
+names(pla1a.0.nr2.rpneg.med) <- str_sub(names(pla1a.0.nr2.rpneg.med), 1, 5)
+names(hip1a.0.nr2.rpneg.med) <- str_sub(names(hip1a.0.nr2.rpneg.med), 1, 5)
+names(badi1a.0.nr2.rpneg.med) <- str_sub(names(badi1a.0.nr2.rpneg.med), 1, 5)
+
+# # rpneg (pass1c)
+# names(gas1c.nr2.rpneg.med) <- str_sub(names(gas1c.nr2.rpneg.med), 1, 5)
+# names(kid1c.nr2.rpneg.med) <- str_sub(names(kid1c.nr2.rpneg.med), 1, 5)
+# names(wadi1c.nr2.rpneg.med) <- str_sub(names(wadi1c.nr2.rpneg.med), 1, 5)
+# names(liv1c.nr2.rpneg.med) <- str_sub(names(liv1c.nr2.rpneg.med), 1, 5)
+# names(hrt1c.nr2.rpneg.med) <- str_sub(names(hrt1c.nr2.rpneg.med), 1, 5)
+# names(lun1c.nr2.rpneg.med) <- str_sub(names(lun1c.nr2.rpneg.med), 1, 5)
+# names(pla1c.nr2.rpneg.med) <- str_sub(names(pla1c.nr2.rpneg.med), 1, 5)
+
+# ionpneg (pass1a)
+names(gas1a.0.nr2.ionpneg.med) <- str_sub(names(gas1a.0.nr2.ionpneg.med), 1, 5)
+names(kid1a.0.nr2.ionpneg.med) <- str_sub(names(kid1a.0.nr2.ionpneg.med), 1, 5)
+names(wadi1a.0.nr2.ionpneg.med) <- str_sub(names(wadi1a.0.nr2.ionpneg.med), 1, 5)
+names(liv1a.0.nr2.ionpneg.med) <- str_sub(names(liv1a.0.nr2.ionpneg.med), 1, 5)
+names(hrt1a.0.nr2.ionpneg.med) <- str_sub(names(hrt1a.0.nr2.ionpneg.med), 1, 5)
+names(lun1a.0.nr2.ionpneg.med) <- str_sub(names(lun1a.0.nr2.ionpneg.med), 1, 5)
+names(pla1a.0.nr2.ionpneg.med) <- str_sub(names(pla1a.0.nr2.ionpneg.med), 1, 5)
+names(hip1a.0.nr2.ionpneg.med) <- str_sub(names(hip1a.0.nr2.ionpneg.med), 1, 5)
+names(badi1a.0.nr2.ionpneg.med) <- str_sub(names(badi1a.0.nr2.ionpneg.med), 1, 5)
+
+# # ionpneg (pass1c)
+# names(gas1c.nr2.ionpneg.med) <- str_sub(names(gas1c.nr2.ionpneg.med), 1, 5)
+# names(kid1c.nr2.ionpneg.med) <- str_sub(names(kid1c.nr2.ionpneg.med), 1, 5)
+# names(wadi1c.nr2.ionpneg.med) <- str_sub(names(wadi1c.nr2.ionpneg.med), 1, 5)
+# names(liv1c.nr2.ionpneg.med) <- str_sub(names(liv1c.nr2.ionpneg.med), 1, 5)
+# names(hrt1c.nr2.ionpneg.med) <- str_sub(names(hrt1c.nr2.ionpneg.med), 1, 5)
+# names(lun1c.nr2.ionpneg.med) <- str_sub(names(lun1c.nr2.ionpneg.med), 1, 5)
+# names(pla1c.nr2.ionpneg.med) <- str_sub(names(pla1c.nr2.ionpneg.med), 1, 5)
+```
+
+### Sort the sample median identifiers
+```{r}
+# rppos (pass1a)
+gas1a.0.nr2.rppos.med <- gas1a.0.nr2.rppos.med[sort(names(gas1a.0.nr2.rppos.med))]
+kid1a.0.nr2.rppos.med <- kid1a.0.nr2.rppos.med[sort(names(kid1a.0.nr2.rppos.med))]
+wadi1a.0.nr2.rppos.med <- wadi1a.0.nr2.rppos.med[sort(names(wadi1a.0.nr2.rppos.med))]
+liv1a.0.nr2.rppos.med <- liv1a.0.nr2.rppos.med[sort(names(liv1a.0.nr2.rppos.med))]
+hrt1a.0.nr2.rppos.med <- hrt1a.0.nr2.rppos.med[sort(names(hrt1a.0.nr2.rppos.med))]
+lun1a.0.nr2.rppos.med <- lun1a.0.nr2.rppos.med[sort(names(lun1a.0.nr2.rppos.med))]
+pla1a.0.nr2.rppos.med <- pla1a.0.nr2.rppos.med[sort(names(pla1a.0.nr2.rppos.med))]
+hip1a.0.nr2.rppos.med <- hip1a.0.nr2.rppos.med[sort(names(hip1a.0.nr2.rppos.med))]
+badi1a.0.nr2.rppos.med <- badi1a.0.nr2.rppos.med[sort(names(badi1a.0.nr2.rppos.med))]
+
+# # rppos (pass1c)
+# gas1c.nr2.rppos.med <- gas1c.nr2.rppos.med[sort(names(gas1c.nr2.rppos.med))]
+# kid1c.nr2.rppos.med <- kid1c.nr2.rppos.med[sort(names(kid1c.nr2.rppos.med))]
+# wadi1c.nr2.rppos.med <- wadi1c.nr2.rppos.med[sort(names(wadi1c.nr2.rppos.med))]
+# liv1c.nr2.rppos.med <- liv1c.nr2.rppos.med[sort(names(liv1c.nr2.rppos.med))]
+# hrt1c.nr2.rppos.med <- hrt1c.nr2.rppos.med[sort(names(hrt1c.nr2.rppos.med))]
+# lun1c.nr2.rppos.med <- lun1c.nr2.rppos.med[sort(names(lun1c.nr2.rppos.med))]
+# pla1c.nr2.rppos.med <- pla1c.nr2.rppos.med[sort(names(pla1c.nr2.rppos.med))]
+
+# rpneg (pass1a)
+gas1a.0.nr2.rpneg.med <- gas1a.0.nr2.rpneg.med[sort(names(gas1a.0.nr2.rpneg.med))]
+kid1a.0.nr2.rpneg.med <- kid1a.0.nr2.rpneg.med[sort(names(kid1a.0.nr2.rpneg.med))]
+wadi1a.0.nr2.rpneg.med <- wadi1a.0.nr2.rpneg.med[sort(names(wadi1a.0.nr2.rpneg.med))]
+liv1a.0.nr2.rpneg.med <- liv1a.0.nr2.rpneg.med[sort(names(liv1a.0.nr2.rpneg.med))]
+hrt1a.0.nr2.rpneg.med <- hrt1a.0.nr2.rpneg.med[sort(names(hrt1a.0.nr2.rpneg.med))]
+lun1a.0.nr2.rpneg.med <- lun1a.0.nr2.rpneg.med[sort(names(lun1a.0.nr2.rpneg.med))]
+pla1a.0.nr2.rpneg.med <- pla1a.0.nr2.rpneg.med[sort(names(pla1a.0.nr2.rpneg.med))]
+hip1a.0.nr2.rpneg.med <- hip1a.0.nr2.rpneg.med[sort(names(hip1a.0.nr2.rpneg.med))]
+badi1a.0.nr2.rpneg.med <- badi1a.0.nr2.rpneg.med[sort(names(badi1a.0.nr2.rpneg.med))]
+
+# # rpneg (pass1c)
+# gas1c.nr2.rpneg.med <- gas1c.nr2.rpneg.med[sort(names(gas1c.nr2.rpneg.med))]
+# kid1c.nr2.rpneg.med <- kid1c.nr2.rpneg.med[sort(names(kid1c.nr2.rpneg.med))]
+# wadi1c.nr2.rpneg.med <- wadi1c.nr2.rpneg.med[sort(names(wadi1c.nr2.rpneg.med))]
+# liv1c.nr2.rpneg.med <- liv1c.nr2.rpneg.med[sort(names(liv1c.nr2.rpneg.med))]
+# hrt1c.nr2.rpneg.med <- hrt1c.nr2.rpneg.med[sort(names(hrt1c.nr2.rpneg.med))]
+# lun1c.nr2.rpneg.med <- lun1c.nr2.rpneg.med[sort(names(lun1c.nr2.rpneg.med))]
+# pla1c.nr2.rpneg.med <- pla1c.nr2.rpneg.med[sort(names(pla1c.nr2.rpneg.med))]
+
+# ionpneg (pass1a)
+gas1a.0.nr2.ionpneg.med <- gas1a.0.nr2.ionpneg.med[sort(names(gas1a.0.nr2.ionpneg.med))]
+kid1a.0.nr2.ionpneg.med <- kid1a.0.nr2.ionpneg.med[sort(names(kid1a.0.nr2.ionpneg.med))]
+wadi1a.0.nr2.ionpneg.med <- wadi1a.0.nr2.ionpneg.med[sort(names(wadi1a.0.nr2.ionpneg.med))]
+liv1a.0.nr2.ionpneg.med <- liv1a.0.nr2.ionpneg.med[sort(names(liv1a.0.nr2.ionpneg.med))]
+hrt1a.0.nr2.ionpneg.med <- hrt1a.0.nr2.ionpneg.med[sort(names(hrt1a.0.nr2.ionpneg.med))]
+lun1a.0.nr2.ionpneg.med <- lun1a.0.nr2.ionpneg.med[sort(names(lun1a.0.nr2.ionpneg.med))]
+pla1a.0.nr2.ionpneg.med <- pla1a.0.nr2.ionpneg.med[sort(names(pla1a.0.nr2.ionpneg.med))]
+hip1a.0.nr2.ionpneg.med <- hip1a.0.nr2.ionpneg.med[sort(names(hip1a.0.nr2.ionpneg.med))]
+badi1a.0.nr2.ionpneg.med <- badi1a.0.nr2.ionpneg.med[sort(names(badi1a.0.nr2.ionpneg.med))]
+
+# # ionpneg (pass1c)
+# gas1c.nr2.ionpneg.med <- gas1c.nr2.ionpneg.med[sort(names(gas1c.nr2.ionpneg.med))]
+# kid1c.nr2.ionpneg.med <- kid1c.nr2.ionpneg.med[sort(names(kid1c.nr2.ionpneg.med))]
+# wadi1c.nr2.ionpneg.med <- wadi1c.nr2.ionpneg.med[sort(names(wadi1c.nr2.ionpneg.med))]
+# liv1c.nr2.ionpneg.med <- liv1c.nr2.ionpneg.med[sort(names(liv1c.nr2.ionpneg.med))]
+# hrt1c.nr2.ionpneg.med <- hrt1c.nr2.ionpneg.med[sort(names(hrt1c.nr2.ionpneg.med))]
+# lun1c.nr2.ionpneg.med <- lun1c.nr2.ionpneg.med[sort(names(lun1c.nr2.ionpneg.med))]
+# pla1c.nr2.ionpneg.med <- pla1c.nr2.ionpneg.med[sort(names(pla1c.nr2.ionpneg.med))]
+```
+
+### Create tissue matrices of sample medians: bids by technology (pass1a)
+```{r}
+# PASS1a
+############################
+# gas
+all(table(c(names(gas1a.0.nr2.rppos.med), names(gas1a.0.nr2.rpneg.med), names(gas1a.0.nr2.ionpneg.med))) == 3)
+if(all(table(c(names(gas1a.0.nr2.rppos.med), names(gas1a.0.nr2.rpneg.med), names(gas1a.0.nr2.ionpneg.med))) == 3)){
+  if(all(names(gas1a.0.nr2.rppos.med) == names(gas1a.0.nr2.rpneg.med)) & all(names(gas1a.0.nr2.rpneg.med) == names(gas1a.0.nr2.ionpneg.med))){
+    gas1a.0.nr2.med <- as.matrix(data.frame(rppos = gas1a.0.nr2.rppos.med, rpneg = gas1a.0.nr2.rpneg.med, ionpneg = gas1a.0.nr2.ionpneg.med))
+  }
+}
+# kid
+# 90010 is missing; replace with NA
+kid1a.0.nr2.ionpneg.med <- c(kid1a.0.nr2.ionpneg.med, '90010' = NA)
+kid1a.0.nr2.ionpneg.med <- kid1a.0.nr2.ionpneg.med[sort(names(kid1a.0.nr2.ionpneg.med))]
+
+all(table(c(names(kid1a.0.nr2.rppos.med), names(kid1a.0.nr2.rpneg.med), names(kid1a.0.nr2.ionpneg.med))) == 3)
+if(all(table(c(names(kid1a.0.nr2.rppos.med), names(kid1a.0.nr2.rpneg.med), names(kid1a.0.nr2.ionpneg.med))) == 3)){
+  if(all(names(kid1a.0.nr2.rppos.med) == names(kid1a.0.nr2.rpneg.med)) & all(names(kid1a.0.nr2.rpneg.med) == names(kid1a.0.nr2.ionpneg.med))){
+    kid1a.0.nr2.med <- as.matrix(data.frame(rppos = kid1a.0.nr2.rppos.med, rpneg = kid1a.0.nr2.rpneg.med, ionpneg = kid1a.0.nr2.ionpneg.med))
+  }
+}
+
+# wadi
+wadi_tbl <- table(c(names(wadi1a.0.nr2.rppos.med), names(wadi1a.0.nr2.rpneg.med), names(wadi1a.0.nr2.ionpneg.med)))
+names(wadi_tbl)[wadi_tbl < 3]
+# 90014, 90040, 90044, 90045, 90050, 90110, 90117, 90122, 90123, 90128, 90134, 90135, 90140, 90146, 90148, 90155 are missing
+
+'90155' %in% names(wadi1a.0.nr2.rppos.med)
+'90155' %in% names(wadi1a.0.nr2.rpneg.med)
+'90155' %in% names(wadi1a.0.nr2.ionpneg.med)
+
+# 90014
+wadi1a.0.nr2.ionpneg.med <- c(wadi1a.0.nr2.ionpneg.med, '90014' = NA)
+wadi1a.0.nr2.ionpneg.med <- wadi1a.0.nr2.ionpneg.med[sort(names(wadi1a.0.nr2.ionpneg.med))]
+# 90040
+wadi1a.0.nr2.ionpneg.med <- c(wadi1a.0.nr2.ionpneg.med, '90040' = NA)
+wadi1a.0.nr2.ionpneg.med <- wadi1a.0.nr2.ionpneg.med[sort(names(wadi1a.0.nr2.ionpneg.med))]
+# 90044
+wadi1a.0.nr2.ionpneg.med <- c(wadi1a.0.nr2.ionpneg.med, '90044' = NA)
+wadi1a.0.nr2.ionpneg.med <- wadi1a.0.nr2.ionpneg.med[sort(names(wadi1a.0.nr2.ionpneg.med))]
+# 90045
+wadi1a.0.nr2.ionpneg.med <- c(wadi1a.0.nr2.ionpneg.med, '90045' = NA)
+wadi1a.0.nr2.ionpneg.med <- wadi1a.0.nr2.ionpneg.med[sort(names(wadi1a.0.nr2.ionpneg.med))]
+# 90050
+wadi1a.0.nr2.ionpneg.med <- c(wadi1a.0.nr2.ionpneg.med, '90050' = NA)
+wadi1a.0.nr2.ionpneg.med <- wadi1a.0.nr2.ionpneg.med[sort(names(wadi1a.0.nr2.ionpneg.med))]
+# 90110
+wadi1a.0.nr2.ionpneg.med <- c(wadi1a.0.nr2.ionpneg.med, '90110' = NA)
+wadi1a.0.nr2.ionpneg.med <- wadi1a.0.nr2.ionpneg.med[sort(names(wadi1a.0.nr2.ionpneg.med))]
+# 90117
+wadi1a.0.nr2.rppos.med <- c(wadi1a.0.nr2.rppos.med, '90117' = NA)
+wadi1a.0.nr2.rppos.med <- wadi1a.0.nr2.rppos.med[sort(names(wadi1a.0.nr2.rppos.med))]
+# 90117
+wadi1a.0.nr2.ionpneg.med <- c(wadi1a.0.nr2.ionpneg.med, '90117' = NA)
+wadi1a.0.nr2.ionpneg.med <- wadi1a.0.nr2.ionpneg.med[sort(names(wadi1a.0.nr2.ionpneg.med))]
+# 90122
+wadi1a.0.nr2.ionpneg.med <- c(wadi1a.0.nr2.ionpneg.med, '90122' = NA)
+wadi1a.0.nr2.ionpneg.med <- wadi1a.0.nr2.ionpneg.med[sort(names(wadi1a.0.nr2.ionpneg.med))]
+# 90123
+wadi1a.0.nr2.rppos.med <- c(wadi1a.0.nr2.rppos.med, '90123' = NA)
+wadi1a.0.nr2.rppos.med <- wadi1a.0.nr2.rppos.med[sort(names(wadi1a.0.nr2.rppos.med))]
+# 90128
+wadi1a.0.nr2.ionpneg.med <- c(wadi1a.0.nr2.ionpneg.med, '90128' = NA)
+wadi1a.0.nr2.ionpneg.med <- wadi1a.0.nr2.ionpneg.med[sort(names(wadi1a.0.nr2.ionpneg.med))]
+# 90134
+wadi1a.0.nr2.ionpneg.med <- c(wadi1a.0.nr2.ionpneg.med, '90134' = NA)
+wadi1a.0.nr2.ionpneg.med <- wadi1a.0.nr2.ionpneg.med[sort(names(wadi1a.0.nr2.ionpneg.med))]
+# 90135
+wadi1a.0.nr2.ionpneg.med <- c(wadi1a.0.nr2.ionpneg.med, '90135' = NA)
+wadi1a.0.nr2.ionpneg.med <- wadi1a.0.nr2.ionpneg.med[sort(names(wadi1a.0.nr2.ionpneg.med))]
+# 90140
+wadi1a.0.nr2.ionpneg.med <- c(wadi1a.0.nr2.ionpneg.med, '90140' = NA)
+wadi1a.0.nr2.ionpneg.med <- wadi1a.0.nr2.ionpneg.med[sort(names(wadi1a.0.nr2.ionpneg.med))]
+# 90146
+wadi1a.0.nr2.ionpneg.med <- c(wadi1a.0.nr2.ionpneg.med, '90146' = NA)
+wadi1a.0.nr2.ionpneg.med <- wadi1a.0.nr2.ionpneg.med[sort(names(wadi1a.0.nr2.ionpneg.med))]
+# 90148
+wadi1a.0.nr2.ionpneg.med <- c(wadi1a.0.nr2.ionpneg.med, '90148' = NA)
+wadi1a.0.nr2.ionpneg.med <- wadi1a.0.nr2.ionpneg.med[sort(names(wadi1a.0.nr2.ionpneg.med))]
+# 90155
+wadi1a.0.nr2.ionpneg.med <- c(wadi1a.0.nr2.ionpneg.med, '90155' = NA)
+wadi1a.0.nr2.ionpneg.med <- wadi1a.0.nr2.ionpneg.med[sort(names(wadi1a.0.nr2.ionpneg.med))]
+# Combine the wadi
+all(table(c(names(wadi1a.0.nr2.rppos.med), names(wadi1a.0.nr2.rpneg.med), names(wadi1a.0.nr2.ionpneg.med))) == 3)
+if(all(table(c(names(wadi1a.0.nr2.rppos.med), names(wadi1a.0.nr2.rpneg.med), names(wadi1a.0.nr2.ionpneg.med))) == 3)){
+  if(all(names(wadi1a.0.nr2.rppos.med) == names(wadi1a.0.nr2.rpneg.med)) & all(names(wadi1a.0.nr2.rpneg.med) == names(wadi1a.0.nr2.ionpneg.med))){
+    wadi1a.0.nr2.med <- as.matrix(data.frame(rppos = wadi1a.0.nr2.rppos.med, rpneg = wadi1a.0.nr2.rpneg.med, ionpneg = wadi1a.0.nr2.ionpneg.med))
+  }
+}
+
+# liv
+all(table(c(names(liv1a.0.nr2.rppos.med), names(liv1a.0.nr2.rpneg.med), names(liv1a.0.nr2.ionpneg.med))) == 3)
+if(all(table(c(names(liv1a.0.nr2.rppos.med), names(liv1a.0.nr2.rpneg.med), names(liv1a.0.nr2.ionpneg.med))) == 3)){
+  if(all(names(liv1a.0.nr2.rppos.med) == names(liv1a.0.nr2.rpneg.med)) & all(names(liv1a.0.nr2.rpneg.med) == names(liv1a.0.nr2.ionpneg.med))){
+    liv1a.0.nr2.med <- as.matrix(data.frame(rppos = liv1a.0.nr2.rppos.med, rpneg = liv1a.0.nr2.rpneg.med, ionpneg = liv1a.0.nr2.ionpneg.med))
+  }
+}
+
+# hrt
+all(table(c(names(hrt1a.0.nr2.rppos.med), names(hrt1a.0.nr2.rpneg.med), names(hrt1a.0.nr2.ionpneg.med))) == 3)
+if(all(table(c(names(hrt1a.0.nr2.rppos.med), names(hrt1a.0.nr2.rpneg.med), names(hrt1a.0.nr2.ionpneg.med))) == 3)){
+  if(all(names(hrt1a.0.nr2.rppos.med) == names(hrt1a.0.nr2.rpneg.med)) & all(names(hrt1a.0.nr2.rpneg.med) == names(hrt1a.0.nr2.ionpneg.med))){
+    hrt1a.0.nr2.med <- as.matrix(data.frame(rppos = hrt1a.0.nr2.rppos.med, rpneg = hrt1a.0.nr2.rpneg.med, ionpneg = hrt1a.0.nr2.ionpneg.med))
+  }
+}
+
+# lun
+all(table(c(names(lun1a.0.nr2.rppos.med), names(lun1a.0.nr2.rpneg.med), names(lun1a.0.nr2.ionpneg.med))) == 3)
+if(all(table(c(names(lun1a.0.nr2.rppos.med), names(lun1a.0.nr2.rpneg.med), names(lun1a.0.nr2.ionpneg.med))) == 3)){
+  if(all(names(lun1a.0.nr2.rppos.med) == names(lun1a.0.nr2.rpneg.med)) & all(names(lun1a.0.nr2.rpneg.med) == names(lun1a.0.nr2.ionpneg.med))){
+    lun1a.0.nr2.med <- as.matrix(data.frame(rppos = lun1a.0.nr2.rppos.med, rpneg = lun1a.0.nr2.rpneg.med, ionpneg = lun1a.0.nr2.ionpneg.med))
+  }
+}
+
+# pla
+pla_tbl <- table(c(names(pla1a.0.nr2.rppos.med), names(pla1a.0.nr2.rpneg.med), names(pla1a.0.nr2.ionpneg.med)))
+names(pla_tbl)[pla_tbl < 3]
+
+'90041' %in% names(pla1a.0.nr2.rppos.med)
+'90041' %in% names(pla1a.0.nr2.rpneg.med)
+'90041' %in% names(pla1a.0.nr2.ionpneg.med)
+
+# 90001
+pla1a.0.nr2.rppos.med <- c(pla1a.0.nr2.rppos.med, '90001' = NA)
+pla1a.0.nr2.rppos.med <- pla1a.0.nr2.rppos.med[sort(names(pla1a.0.nr2.rppos.med))]
+pla1a.0.nr2.rpneg.med <- c(pla1a.0.nr2.rpneg.med, '90001' = NA)
+pla1a.0.nr2.rpneg.med <- pla1a.0.nr2.rpneg.med[sort(names(pla1a.0.nr2.rpneg.med))]
+
+# 90041
+pla1a.0.nr2.ionpneg.med <- c(pla1a.0.nr2.ionpneg.med, '90041' = NA)
+pla1a.0.nr2.ionpneg.med <- pla1a.0.nr2.ionpneg.med[sort(names(pla1a.0.nr2.ionpneg.med))]
+
+all(table(c(names(pla1a.0.nr2.rppos.med), names(pla1a.0.nr2.rpneg.med), names(pla1a.0.nr2.ionpneg.med))) == 3)
+if(all(table(c(names(pla1a.0.nr2.rppos.med), names(pla1a.0.nr2.rpneg.med), names(pla1a.0.nr2.ionpneg.med))) == 3)){
+  if(all(names(pla1a.0.nr2.rppos.med) == names(pla1a.0.nr2.rpneg.med)) & all(names(pla1a.0.nr2.rpneg.med) == names(pla1a.0.nr2.ionpneg.med))){
+    pla1a.0.nr2.med <- as.matrix(data.frame(rppos = pla1a.0.nr2.rppos.med, rpneg = pla1a.0.nr2.rpneg.med, ionpneg = pla1a.0.nr2.ionpneg.med))
+  }
+}
+
+# hip
+all(table(c(names(hip1a.0.nr2.rppos.med), names(hip1a.0.nr2.rpneg.med), names(hip1a.0.nr2.ionpneg.med))) == 3)
+if(all(table(c(names(hip1a.0.nr2.rppos.med), names(hip1a.0.nr2.rpneg.med), names(hip1a.0.nr2.ionpneg.med))) == 3)){
+  if(all(names(hip1a.0.nr2.rppos.med) == names(hip1a.0.nr2.rpneg.med)) & all(names(hip1a.0.nr2.rpneg.med) == names(hip1a.0.nr2.ionpneg.med))){
+    hip1a.0.nr2.med <- as.matrix(data.frame(rppos = hip1a.0.nr2.rppos.med, rpneg = hip1a.0.nr2.rpneg.med, ionpneg = hip1a.0.nr2.ionpneg.med))
+  }
+}
+
+# badi
+badi_tbl <- table(c(names(badi1a.0.nr2.rppos.med), names(badi1a.0.nr2.rpneg.med), names(badi1a.0.nr2.ionpneg.med)))
+names(badi_tbl)[badi_tbl < 3]
+
+'90001' %in% names(badi1a.0.nr2.rppos.med)
+'90001' %in% names(badi1a.0.nr2.rpneg.med)
+'90001' %in% names(badi1a.0.nr2.ionpneg.med)
+
+# 90001
+badi1a.0.nr2.rppos.med <- c(badi1a.0.nr2.rppos.med, '90001' = NA)
+badi1a.0.nr2.rppos.med <- badi1a.0.nr2.rppos.med[sort(names(badi1a.0.nr2.rppos.med))]
+
+all(table(c(names(badi1a.0.nr2.rppos.med), names(badi1a.0.nr2.rpneg.med), names(badi1a.0.nr2.ionpneg.med))) == 3)
+if(all(table(c(names(badi1a.0.nr2.rppos.med), names(badi1a.0.nr2.rpneg.med), names(badi1a.0.nr2.ionpneg.med))) == 3)){
+  if(all(names(badi1a.0.nr2.rppos.med) == names(badi1a.0.nr2.rpneg.med)) & all(names(badi1a.0.nr2.rpneg.med) == names(badi1a.0.nr2.ionpneg.med))){
+    badi1a.0.nr2.med <- as.matrix(data.frame(rppos = badi1a.0.nr2.rppos.med, rpneg = badi1a.0.nr2.rpneg.med, ionpneg = badi1a.0.nr2.ionpneg.med))
+  }
+}
+```
+
+### Center the sample median matrices and visualize (kid1a)
+```{r}
+# visualize the non-centered sample medians
+# image(rotate(kid1a.nr2.med),col=redblue100,axes=F, asp =1)
+# Center the sample medians (by tech)
+pass1a.0.nr2.med <- list(pla1a.0.nr2.med, hip1a.0.nr2.med, gas1a.0.nr2.med,
+                         hrt1a.0.nr2.med, kid1a.0.nr2.med, lun1a.0.nr2.med,
+                         liv1a.0.nr2.med, badi1a.0.nr2.med, wadi1a.0.nr2.med)
+pass1a.0.sct <- list(pla1a.0.sct, hip1a.0.sct, gas1a.0.sct,
+                         hrt1a.0.sct, kid1a.0.sct, lun1a.0.sct,
+                         liv1a.0.sct, badi1a.0.sct, wadi1a.0.sct)
+
+# Show the log2 (sex, control, time)
+par(mfrow=c(3,3), mar = c(0,0,3,0))
+for(i in 1:length(pass1a.0.nr2.med)){
+  image(rotate(pass1a.0.nr2.med[[i]][order(pass1a.0.sct[[i]][,2],pass1a.0.sct[[i]][,3],pass1a.0.sct[[i]][,4]),])
+      ,col=redblue100,axes=F, asp =1, main = glue("{tis[[i]]}"))
+}
+
+
+
+i <- 1
+tmp <- pass1a.0.nr2.med.ctr <- keeps <- list()
+par(mfrow=c(3,3), mar = c(0,0,3,0))
+for(i in 1:length(pass1a.0.nr2.med)){
+  tmp[[i]]<-apply(pass1a.0.nr2.med[[i]],2,function(x) median(x,na.rm=T))
+  pass1a.0.nr2.med.ctr[[i]] <- pass1a.0.nr2.med[[i]]
+  for(j in 1:ncol(pass1a.0.nr2.med.ctr[[i]])) {
+    pass1a.0.nr2.med.ctr[[i]][,j]<- round(pass1a.0.nr2.med[[i]][,j]-tmp[[i]][j], digits = 4)
+  }
+  # sort the sample annotation matrix
+  if( all( pass1a.0.sct[[i]][,1] %in% as.numeric(row.names(pass1a.0.nr2.med[[i]])) ) ){
+    a <- range(pass1a.0.nr2.med.ctr[[i]], na.rm = TRUE)[1]
+    b <- range(pass1a.0.nr2.med.ctr[[i]], na.rm = TRUE)[2]
+    sex.type <- pass1a.0.sct[[i]][,2]
+    sex.type  <- ( (b - a) * ((sex.type - min(sex.type))/((max(sex.type) - min(sex.type)))) + a) 
+    control.type <- pass1a.0.sct[[i]][,3]
+    control.type  <- ( (b - a) * ((control.type - min(control.type))/((max(control.type) - min(control.type)))) + a) 
+    time.type <- pass1a.0.sct[[i]][,4]
+    time.type  <- ( (b - a) * ((time.type - min(time.type))/((max(time.type) - min(time.type)))) + a) 
+    sidebar <- cbind(sex.type,control.type,time.type)
+  }
+  # Subset samples
+  keeps[[i]] <- pass1a.0.sct[[i]][,1][pass1a.0.sct[[i]][,1] %in% row.names(pass1a.0.nr2.med.ctr[[i]])]
+  pass1a.0.sct[[i]] <- pass1a.0.sct[[i]][pass1a.0.sct[[i]][,1] %in% keeps[[i]],]
+  # Plot the image
+  image(rotate(cbind(sidebar[order(pass1a.0.sct[[i]][,2],pass1a.0.sct[[i]][,3],pass1a.0.sct[[i]][,4]),],
+                   pass1a.0.nr2.med.ctr[[i]][order(pass1a.0.sct[[i]][,2],pass1a.0.sct[[i]][,3],pass1a.0.sct[[i]][,4]),]))
+      ,col=redblue100,axes=F, asp =1, main = glue("{tis[[i]]}"))
+}
+
+
+```
+
+`r knitr::knit_exit()`
+
+### Create tissue matrices of sample medians: bids by technology (pass1c)
+```{r}
+# PASS1c
+############################
+# gas
+# 90757 is duplicated
+n <- which(grepl('90757', names(gas1c.nr2.rppos.med)))[2]
+gas1c.nr2.rppos.med <- gas1c.nr2.rppos.med[-n]
+if(all(table(c(names(gas1c.nr2.rppos.med), names(gas1c.nr2.rpneg.med), names(gas1c.nr2.ionpneg.med))) == 3)){
+  if(names(gas1c.nr2.rppos.med) == names(gas1c.nr2.rpneg.med) & names(gas1c.nr2.rpneg.med) == names(gas1c.nr2.ionpneg.med)){
+    gas1c.nr2.med <- as.matrix(data.frame(rppos = gas1c.nr2.rppos.med, rpneg = gas1c.nr2.rpneg.med, ionpneg = gas1c.nr2.ionpneg.med))
+  }
+}
+# kid
+# 90801 is duplicated
+n <- which(grepl('90801', names(kid1c.nr2.ionpneg.med)))[2]
+kid1c.nr2.ionpneg.med <- kid1c.nr2.ionpneg.med[-n]
+all(table(c(names(kid1c.nr2.rppos.med), names(kid1c.nr2.rpneg.med), names(kid1c.nr2.ionpneg.med))) == 3)
+if(all(table(c(names(kid1c.nr2.rppos.med), names(kid1c.nr2.rpneg.med), names(kid1c.nr2.ionpneg.med))) == 3)){
+  print('kid: names check out')
+  if(names(kid1c.nr2.rppos.med) == names(kid1c.nr2.rpneg.med) & names(kid1c.nr2.rpneg.med) == names(kid1c.nr2.ionpneg.med)){
+    kid1c.nr2.med <- as.matrix(data.frame(rppos = kid1c.nr2.rppos.med, rpneg = kid1c.nr2.rpneg.med, ionpneg = kid1c.nr2.ionpneg.med))
+  }
+}
+# wadi
+# 90743 is duplicated
+n <- which(grepl('90743', names(wadi1c.nr2.rppos.med)))[2]
+wadi1c.nr2.rppos.med <- wadi1c.nr2.rppos.med[-n]
+all(table(c(names(wadi1c.nr2.rppos.med), names(wadi1c.nr2.rpneg.med), names(wadi1c.nr2.ionpneg.med))) == 3)
+if(all(table(c(names(wadi1c.nr2.rppos.med), names(wadi1c.nr2.rpneg.med), names(wadi1c.nr2.ionpneg.med))) == 3)){
+  if(names(wadi1c.nr2.rppos.med) == names(wadi1c.nr2.rpneg.med) & names(wadi1c.nr2.rpneg.med) == names(wadi1c.nr2.ionpneg.med)){
+    wadi1c.nr2.med <- as.matrix(data.frame(rppos = wadi1c.nr2.rppos.med, rpneg = wadi1c.nr2.rpneg.med, ionpneg = wadi1c.nr2.ionpneg.med))
+  }
+}
+# liv
+all(table(c(names(liv1c.nr2.rppos.med), names(liv1c.nr2.rpneg.med), names(liv1c.nr2.ionpneg.med))) == 3)
+if(all(table(c(names(liv1c.nr2.rppos.med), names(liv1c.nr2.rpneg.med), names(liv1c.nr2.ionpneg.med))) == 3)){
+  if(names(liv1c.nr2.rppos.med) == names(liv1c.nr2.rpneg.med) & names(liv1c.nr2.rpneg.med) == names(liv1c.nr2.ionpneg.med)){
+    liv1c.nr2.med <- as.matrix(data.frame(rppos = liv1c.nr2.rppos.med, rpneg = liv1c.nr2.rpneg.med, ionpneg = liv1c.nr2.ionpneg.med))
+  }
+}
+# hrt
+if(all(table(c(names(hrt1c.nr2.rppos.med), names(hrt1c.nr2.rpneg.med), names(hrt1c.nr2.ionpneg.med))) == 3)){
+  if(names(hrt1c.nr2.rppos.med) == names(hrt1c.nr2.rpneg.med) & names(hrt1c.nr2.rpneg.med) == names(hrt1c.nr2.ionpneg.med)){
+    hrt1c.nr2.med <- as.matrix(data.frame(rppos = hrt1c.nr2.rppos.med, rpneg = hrt1c.nr2.rpneg.med, ionpneg = hrt1c.nr2.ionpneg.med))
+  }
+}
+# lun
+# 90750 is missing
+lun1c.nr2.rppos.med <- c(lun1c.nr2.rppos.med, '90750' = NA)
+lun1c.nr2.rppos.med <- lun1c.nr2.rppos.med[sort(names(lun1c.nr2.rppos.med))]
+
+#lun1c.nr2.rppos.med <- lun1c.nr2.rppos.med[-14]
+all(table(c(names(lun1c.nr2.rppos.med), names(lun1c.nr2.rpneg.med), names(lun1c.nr2.ionpneg.med))) == 3)
+if(all(table(c(names(lun1c.nr2.rppos.med), names(lun1c.nr2.rpneg.med), names(lun1c.nr2.ionpneg.med))) == 3)){
+  if(names(lun1c.nr2.rppos.med) == names(lun1c.nr2.rpneg.med) & names(lun1c.nr2.rpneg.med) == names(lun1c.nr2.ionpneg.med)){
+    lun1c.nr2.med <- as.matrix(data.frame(rppos = lun1c.nr2.rppos.med, rpneg = lun1c.nr2.rpneg.med, ionpneg = lun1c.nr2.ionpneg.med))
+  }
+}
+# pla
+if(all(table(c(names(pla1c.nr2.rppos.med), names(pla1c.nr2.rpneg.med), names(pla1c.nr2.ionpneg.med))) == 3)){
+  if(names(pla1c.nr2.rppos.med) == names(pla1c.nr2.rpneg.med) & names(pla1c.nr2.rpneg.med) == names(pla1c.nr2.ionpneg.med)){
+    pla1c.nr2.med <- as.matrix(data.frame(rppos = pla1c.nr2.rppos.med, rpneg = pla1c.nr2.rpneg.med, ionpneg = pla1c.nr2.ionpneg.med))
+  }
+}
+```
+
+### Calculate sample correlation medians
+```{r}
+# rppos (pass1a)
+gas1a.nr2.rppos.cormed <- round(apply(cor(t(gas1a.nr2.rppos),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+kid1a.nr2.rppos.cormed <- round(apply(cor(t(kid1a.nr2.rppos),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+wadi1a.nr2.rppos.cormed <- round(apply(cor(t(wadi1a.nr2.rppos),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+liv1a.nr2.rppos.cormed <- round(apply(cor(t(liv1a.nr2.rppos),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+hrt1a.nr2.rppos.cormed <- round(apply(cor(t(hrt1a.nr2.rppos),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+lun1a.nr2.rppos.cormed <- round(apply(cor(t(lun1a.nr2.rppos),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+pla1a.nr2.rppos.cormed <- round(apply(cor(t(pla1a.nr2.rppos),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+
+# rppos (pass1c)
+gas1c.nr2.rppos.cormed <- round(apply(cor(t(gas1c.nr2.rppos),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+kid1c.nr2.rppos.cormed <- round(apply(cor(t(kid1c.nr2.rppos),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+wadi1c.nr2.rppos.cormed <- round(apply(cor(t(wadi1c.nr2.rppos),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+liv1c.nr2.rppos.cormed <- round(apply(cor(t(liv1c.nr2.rppos),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+hrt1c.nr2.rppos.cormed <- round(apply(cor(t(hrt1c.nr2.rppos),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+lun1c.nr2.rppos.cormed <- round(apply(cor(t(lun1c.nr2.rppos),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+pla1c.nr2.rppos.cormed <- round(apply(cor(t(pla1c.nr2.rppos),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+
+# rpneg (pass1a)
+gas1a.nr2.rpneg.cormed <- round(apply(cor(t(gas1a.nr2.rpneg),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+kid1a.nr2.rpneg.cormed <- round(apply(cor(t(kid1a.nr2.rpneg),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+wadi1a.nr2.rpneg.cormed <- round(apply(cor(t(wadi1a.nr2.rpneg),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+liv1a.nr2.rpneg.cormed <- round(apply(cor(t(liv1a.nr2.rpneg),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+hrt1a.nr2.rpneg.cormed <- round(apply(cor(t(hrt1a.nr2.rpneg),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+lun1a.nr2.rpneg.cormed <- round(apply(cor(t(lun1a.nr2.rpneg),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+pla1a.nr2.rpneg.cormed <- round(apply(cor(t(pla1a.nr2.rpneg),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+
+# rpneg (pass1c)
+gas1c.nr2.rpneg.cormed <- round(apply(cor(t(gas1c.nr2.rpneg),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+kid1c.nr2.rpneg.cormed <- round(apply(cor(t(kid1c.nr2.rpneg),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+wadi1c.nr2.rpneg.cormed <- round(apply(cor(t(wadi1c.nr2.rpneg),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+liv1c.nr2.rpneg.cormed <- round(apply(cor(t(liv1c.nr2.rpneg),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+hrt1c.nr2.rpneg.cormed <- round(apply(cor(t(hrt1c.nr2.rpneg),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+lun1c.nr2.rpneg.cormed <- round(apply(cor(t(lun1c.nr2.rpneg),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+pla1c.nr2.rpneg.cormed <- round(apply(cor(t(pla1c.nr2.rpneg),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+
+# ionpneg (pass1a)
+gas1a.nr2.ionpneg.cormed <- round(apply(cor(t(gas1a.nr2.ionpneg),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+kid1a.nr2.ionpneg.cormed <- round(apply(cor(t(kid1a.nr2.ionpneg),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+wadi1a.nr2.ionpneg.cormed <- round(apply(cor(t(wadi1a.nr2.ionpneg),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+liv1a.nr2.ionpneg.cormed <- round(apply(cor(t(liv1a.nr2.ionpneg),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+hrt1a.nr2.ionpneg.cormed <- round(apply(cor(t(hrt1a.nr2.ionpneg),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+lun1a.nr2.ionpneg.cormed <- round(apply(cor(t(lun1a.nr2.ionpneg),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+pla1a.nr2.ionpneg.cormed <- round(apply(cor(t(pla1a.nr2.ionpneg),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+
+# ionpneg (pass1c)
+gas1c.nr2.ionpneg.cormed <- round(apply(cor(t(gas1c.nr2.ionpneg),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+kid1c.nr2.ionpneg.cormed <- round(apply(cor(t(kid1c.nr2.ionpneg),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+wadi1c.nr2.ionpneg.cormed <- round(apply(cor(t(wadi1c.nr2.ionpneg),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+liv1c.nr2.ionpneg.cormed <- round(apply(cor(t(liv1c.nr2.ionpneg),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+hrt1c.nr2.ionpneg.cormed <- round(apply(cor(t(hrt1c.nr2.ionpneg),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+lun1c.nr2.ionpneg.cormed <- round(apply(cor(t(lun1c.nr2.ionpneg),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+pla1c.nr2.ionpneg.cormed <- round(apply(cor(t(pla1c.nr2.ionpneg),method="spearman",use="pairwise.complete.obs"),1,median), digits = 3)
+```
+
+### Convert sample correlation median identifiers to bid
+```{r}
+# rppos (pass1a)
+names(gas1a.nr2.rppos.cormed) <- str_sub(names(gas1a.nr2.rppos.cormed), 1, 5)
+names(kid1a.nr2.rppos.cormed) <- str_sub(names(kid1a.nr2.rppos.cormed), 1, 5)
+names(wadi1a.nr2.rppos.cormed) <- str_sub(names(wadi1a.nr2.rppos.cormed), 1, 5)
+names(liv1a.nr2.rppos.cormed) <- str_sub(names(liv1a.nr2.rppos.cormed), 1, 5)
+names(hrt1a.nr2.rppos.cormed) <- str_sub(names(hrt1a.nr2.rppos.cormed), 1, 5)
+names(lun1a.nr2.rppos.cormed) <- str_sub(names(lun1a.nr2.rppos.cormed), 1, 5)
+names(pla1a.nr2.rppos.cormed) <- str_sub(names(pla1a.nr2.rppos.cormed), 1, 5)
+
+# rppos (pass1c)
+names(gas1c.nr2.rppos.cormed) <- str_sub(names(gas1c.nr2.rppos.cormed), 1, 5)
+names(kid1c.nr2.rppos.cormed) <- str_sub(names(kid1c.nr2.rppos.cormed), 1, 5)
+names(wadi1c.nr2.rppos.cormed) <- str_sub(names(wadi1c.nr2.rppos.cormed), 1, 5)
+names(liv1c.nr2.rppos.cormed) <- str_sub(names(liv1c.nr2.rppos.cormed), 1, 5)
+names(hrt1c.nr2.rppos.cormed) <- str_sub(names(hrt1c.nr2.rppos.cormed), 1, 5)
+names(lun1c.nr2.rppos.cormed) <- str_sub(names(lun1c.nr2.rppos.cormed), 1, 5)
+names(pla1c.nr2.rppos.cormed) <- str_sub(names(pla1c.nr2.rppos.cormed), 1, 5)
+
+# rpneg (pass1a)
+names(gas1a.nr2.rpneg.cormed) <- str_sub(names(gas1a.nr2.rpneg.cormed), 1, 5)
+names(kid1a.nr2.rpneg.cormed) <- str_sub(names(kid1a.nr2.rpneg.cormed), 1, 5)
+names(wadi1a.nr2.rpneg.cormed) <- str_sub(names(wadi1a.nr2.rpneg.cormed), 1, 5)
+names(liv1a.nr2.rpneg.cormed) <- str_sub(names(liv1a.nr2.rpneg.cormed), 1, 5)
+names(hrt1a.nr2.rpneg.cormed) <- str_sub(names(hrt1a.nr2.rpneg.cormed), 1, 5)
+names(lun1a.nr2.rpneg.cormed) <- str_sub(names(lun1a.nr2.rpneg.cormed), 1, 5)
+names(pla1a.nr2.rpneg.cormed) <- str_sub(names(pla1a.nr2.rpneg.cormed), 1, 5)
+
+# rpneg (pass1c)
+names(gas1c.nr2.rpneg.cormed) <- str_sub(names(gas1c.nr2.rpneg.cormed), 1, 5)
+names(kid1c.nr2.rpneg.cormed) <- str_sub(names(kid1c.nr2.rpneg.cormed), 1, 5)
+names(wadi1c.nr2.rpneg.cormed) <- str_sub(names(wadi1c.nr2.rpneg.cormed), 1, 5)
+names(liv1c.nr2.rpneg.cormed) <- str_sub(names(liv1c.nr2.rpneg.cormed), 1, 5)
+names(hrt1c.nr2.rpneg.cormed) <- str_sub(names(hrt1c.nr2.rpneg.cormed), 1, 5)
+names(lun1c.nr2.rpneg.cormed) <- str_sub(names(lun1c.nr2.rpneg.cormed), 1, 5)
+names(pla1c.nr2.rpneg.cormed) <- str_sub(names(pla1c.nr2.rpneg.cormed), 1, 5)
+
+# ionpneg (pass1a)
+names(gas1a.nr2.ionpneg.cormed) <- str_sub(names(gas1a.nr2.ionpneg.cormed), 1, 5)
+names(kid1a.nr2.ionpneg.cormed) <- str_sub(names(kid1a.nr2.ionpneg.cormed), 1, 5)
+names(wadi1a.nr2.ionpneg.cormed) <- str_sub(names(wadi1a.nr2.ionpneg.cormed), 1, 5)
+names(liv1a.nr2.ionpneg.cormed) <- str_sub(names(liv1a.nr2.ionpneg.cormed), 1, 5)
+names(hrt1a.nr2.ionpneg.cormed) <- str_sub(names(hrt1a.nr2.ionpneg.cormed), 1, 5)
+names(lun1a.nr2.ionpneg.cormed) <- str_sub(names(lun1a.nr2.ionpneg.cormed), 1, 5)
+names(pla1a.nr2.ionpneg.cormed) <- str_sub(names(pla1a.nr2.ionpneg.cormed), 1, 5)
+
+# ionpneg (pass1c)
+names(gas1c.nr2.ionpneg.cormed) <- str_sub(names(gas1c.nr2.ionpneg.cormed), 1, 5)
+names(kid1c.nr2.ionpneg.cormed) <- str_sub(names(kid1c.nr2.ionpneg.cormed), 1, 5)
+names(wadi1c.nr2.ionpneg.cormed) <- str_sub(names(wadi1c.nr2.ionpneg.cormed), 1, 5)
+names(liv1c.nr2.ionpneg.cormed) <- str_sub(names(liv1c.nr2.ionpneg.cormed), 1, 5)
+names(hrt1c.nr2.ionpneg.cormed) <- str_sub(names(hrt1c.nr2.ionpneg.cormed), 1, 5)
+names(lun1c.nr2.ionpneg.cormed) <- str_sub(names(lun1c.nr2.ionpneg.cormed), 1, 5)
+names(pla1c.nr2.ionpneg.cormed) <- str_sub(names(pla1c.nr2.ionpneg.cormed), 1, 5)
+```
+
+### Sort the sample correlation median identifiers
+```{r}
+# rppos (pass1a)
+gas1a.nr2.rppos.cormed <- gas1a.nr2.rppos.cormed[sort(names(gas1a.nr2.rppos.cormed))]
+kid1a.nr2.rppos.cormed <- kid1a.nr2.rppos.cormed[sort(names(kid1a.nr2.rppos.cormed))]
+wadi1a.nr2.rppos.cormed <- wadi1a.nr2.rppos.cormed[sort(names(wadi1a.nr2.rppos.cormed))]
+liv1a.nr2.rppos.cormed <- liv1a.nr2.rppos.cormed[sort(names(liv1a.nr2.rppos.cormed))]
+hrt1a.nr2.rppos.cormed <- hrt1a.nr2.rppos.cormed[sort(names(hrt1a.nr2.rppos.cormed))]
+lun1a.nr2.rppos.cormed <- lun1a.nr2.rppos.cormed[sort(names(lun1a.nr2.rppos.cormed))]
+pla1a.nr2.rppos.cormed <- pla1a.nr2.rppos.cormed[sort(names(pla1a.nr2.rppos.cormed))]
+
+# rppos (pass1c)
+gas1c.nr2.rppos.cormed <- gas1c.nr2.rppos.cormed[sort(names(gas1c.nr2.rppos.cormed))]
+kid1c.nr2.rppos.cormed <- kid1c.nr2.rppos.cormed[sort(names(kid1c.nr2.rppos.cormed))]
+wadi1c.nr2.rppos.cormed <- wadi1c.nr2.rppos.cormed[sort(names(wadi1c.nr2.rppos.cormed))]
+liv1c.nr2.rppos.cormed <- liv1c.nr2.rppos.cormed[sort(names(liv1c.nr2.rppos.cormed))]
+hrt1c.nr2.rppos.cormed <- hrt1c.nr2.rppos.cormed[sort(names(hrt1c.nr2.rppos.cormed))]
+lun1c.nr2.rppos.cormed <- lun1c.nr2.rppos.cormed[sort(names(lun1c.nr2.rppos.cormed))]
+pla1c.nr2.rppos.cormed <- pla1c.nr2.rppos.cormed[sort(names(pla1c.nr2.rppos.cormed))]
+
+# rpneg (pass1a)
+gas1a.nr2.rpneg.cormed <- gas1a.nr2.rpneg.cormed[sort(names(gas1a.nr2.rpneg.cormed))]
+kid1a.nr2.rpneg.cormed <- kid1a.nr2.rpneg.cormed[sort(names(kid1a.nr2.rpneg.cormed))]
+wadi1a.nr2.rpneg.cormed <- wadi1a.nr2.rpneg.cormed[sort(names(wadi1a.nr2.rpneg.cormed))]
+liv1a.nr2.rpneg.cormed <- liv1a.nr2.rpneg.cormed[sort(names(liv1a.nr2.rpneg.cormed))]
+hrt1a.nr2.rpneg.cormed <- hrt1a.nr2.rpneg.cormed[sort(names(hrt1a.nr2.rpneg.cormed))]
+lun1a.nr2.rpneg.cormed <- lun1a.nr2.rpneg.cormed[sort(names(lun1a.nr2.rpneg.cormed))]
+pla1a.nr2.rpneg.cormed <- pla1a.nr2.rpneg.cormed[sort(names(pla1a.nr2.rpneg.cormed))]
+
+# rpneg (pass1c)
+gas1c.nr2.rpneg.cormed <- gas1c.nr2.rpneg.cormed[sort(names(gas1c.nr2.rpneg.cormed))]
+kid1c.nr2.rpneg.cormed <- kid1c.nr2.rpneg.cormed[sort(names(kid1c.nr2.rpneg.cormed))]
+wadi1c.nr2.rpneg.cormed <- wadi1c.nr2.rpneg.cormed[sort(names(wadi1c.nr2.rpneg.cormed))]
+liv1c.nr2.rpneg.cormed <- liv1c.nr2.rpneg.cormed[sort(names(liv1c.nr2.rpneg.cormed))]
+hrt1c.nr2.rpneg.cormed <- hrt1c.nr2.rpneg.cormed[sort(names(hrt1c.nr2.rpneg.cormed))]
+lun1c.nr2.rpneg.cormed <- lun1c.nr2.rpneg.cormed[sort(names(lun1c.nr2.rpneg.cormed))]
+pla1c.nr2.rpneg.cormed <- pla1c.nr2.rpneg.cormed[sort(names(pla1c.nr2.rpneg.cormed))]
+
+# ionpneg (pass1a)
+gas1a.nr2.ionpneg.cormed <- gas1a.nr2.ionpneg.cormed[sort(names(gas1a.nr2.ionpneg.cormed))]
+kid1a.nr2.ionpneg.cormed <- kid1a.nr2.ionpneg.cormed[sort(names(kid1a.nr2.ionpneg.cormed))]
+wadi1a.nr2.ionpneg.cormed <- wadi1a.nr2.ionpneg.cormed[sort(names(wadi1a.nr2.ionpneg.cormed))]
+liv1a.nr2.ionpneg.cormed <- liv1a.nr2.ionpneg.cormed[sort(names(liv1a.nr2.ionpneg.cormed))]
+hrt1a.nr2.ionpneg.cormed <- hrt1a.nr2.ionpneg.cormed[sort(names(hrt1a.nr2.ionpneg.cormed))]
+lun1a.nr2.ionpneg.cormed <- lun1a.nr2.ionpneg.cormed[sort(names(lun1a.nr2.ionpneg.cormed))]
+pla1a.nr2.ionpneg.cormed <- pla1a.nr2.ionpneg.cormed[sort(names(pla1a.nr2.ionpneg.cormed))]
+
+# ionpneg (pass1c)
+gas1c.nr2.ionpneg.cormed <- gas1c.nr2.ionpneg.cormed[sort(names(gas1c.nr2.ionpneg.cormed))]
+kid1c.nr2.ionpneg.cormed <- kid1c.nr2.ionpneg.cormed[sort(names(kid1c.nr2.ionpneg.cormed))]
+wadi1c.nr2.ionpneg.cormed <- wadi1c.nr2.ionpneg.cormed[sort(names(wadi1c.nr2.ionpneg.cormed))]
+liv1c.nr2.ionpneg.cormed <- liv1c.nr2.ionpneg.cormed[sort(names(liv1c.nr2.ionpneg.cormed))]
+hrt1c.nr2.ionpneg.cormed <- hrt1c.nr2.ionpneg.cormed[sort(names(hrt1c.nr2.ionpneg.cormed))]
+lun1c.nr2.ionpneg.cormed <- lun1c.nr2.ionpneg.cormed[sort(names(lun1c.nr2.ionpneg.cormed))]
+pla1c.nr2.ionpneg.cormed <- pla1c.nr2.ionpneg.cormed[sort(names(pla1c.nr2.ionpneg.cormed))]
+```
+
+### Create tissue matrices of sample correlation medians: bids by technology (pass1a)
+```{r}
+# PASS1a
+############################
+# gas
+if(all(table(c(names(gas1a.nr2.rppos.cormed), names(gas1a.nr2.rpneg.cormed), names(gas1a.nr2.ionpneg.cormed))) == 3)){
+  if(all(names(gas1a.nr2.rppos.cormed) == names(gas1a.nr2.rpneg.cormed)) & 
+     all(names(gas1a.nr2.rpneg.cormed) == names(gas1a.nr2.ionpneg.cormed))){
+    gas1a.nr2.cormed <- as.matrix(data.frame(rppos = gas1a.nr2.rppos.cormed, 
+                                             rpneg = gas1a.nr2.rpneg.cormed, 
+                                             ionpneg = gas1a.nr2.ionpneg.cormed))
+  }
+}
+# kid
+# 90010 is missing; replace with NA
+kid1a.nr2.ionpneg.cormed <- c(kid1a.nr2.ionpneg.cormed, '90010' = NA)
+kid1a.nr2.ionpneg.cormed <- kid1a.nr2.ionpneg.cormed[sort(names(kid1a.nr2.ionpneg.cormed))]
+
+all(table(c(names(kid1a.nr2.rppos.cormed), names(kid1a.nr2.rpneg.cormed), names(kid1a.nr2.ionpneg.cormed))) == 3)
+if(all(table(c(names(kid1a.nr2.rppos.cormed), names(kid1a.nr2.rpneg.cormed), names(kid1a.nr2.ionpneg.cormed))) == 3)){
+  if(all(names(kid1a.nr2.rppos.cormed) == names(kid1a.nr2.rpneg.cormed)) & 
+     all(names(kid1a.nr2.rpneg.cormed) == names(kid1a.nr2.ionpneg.cormed))){
+    kid1a.nr2.cormed <- as.matrix(data.frame(rppos = kid1a.nr2.rppos.cormed, 
+                                             rpneg = kid1a.nr2.rpneg.cormed, 
+                                             ionpneg = kid1a.nr2.ionpneg.cormed))
+  }
+}
+
+# wadi
+# 90014, 90040, 90044, 90045, 90050, 90110, 90112, 90117, 90122, 90128, 90129, 90134, 90135, 90140, 90146, 90148 are missing
+
+# '90148' %in% names(wadi1a.nr2.rppos.cormed)
+# '90148' %in% names(wadi1a.nr2.rpneg.cormed)
+# '90148' %in% names(wadi1a.nr2.ionpneg.cormed)
+
+# 90014
+wadi1a.nr2.ionpneg.cormed <- c(wadi1a.nr2.ionpneg.cormed, '90014' = NA)
+wadi1a.nr2.ionpneg.cormed <- wadi1a.nr2.ionpneg.cormed[sort(names(wadi1a.nr2.ionpneg.cormed))]
+# 90040
+wadi1a.nr2.ionpneg.cormed <- c(wadi1a.nr2.ionpneg.cormed, '90040' = NA)
+wadi1a.nr2.ionpneg.cormed <- wadi1a.nr2.ionpneg.cormed[sort(names(wadi1a.nr2.ionpneg.cormed))]
+# 90044
+wadi1a.nr2.ionpneg.cormed <- c(wadi1a.nr2.ionpneg.cormed, '90044' = NA)
+wadi1a.nr2.ionpneg.cormed <- wadi1a.nr2.ionpneg.cormed[sort(names(wadi1a.nr2.ionpneg.cormed))]
+# 90045
+wadi1a.nr2.ionpneg.cormed <- c(wadi1a.nr2.ionpneg.cormed, '90045' = NA)
+wadi1a.nr2.ionpneg.cormed <- wadi1a.nr2.ionpneg.cormed[sort(names(wadi1a.nr2.ionpneg.cormed))]
+# 90050
+wadi1a.nr2.ionpneg.cormed <- c(wadi1a.nr2.ionpneg.cormed, '90050' = NA)
+wadi1a.nr2.ionpneg.cormed <- wadi1a.nr2.ionpneg.cormed[sort(names(wadi1a.nr2.ionpneg.cormed))]
+# 90110
+wadi1a.nr2.ionpneg.cormed <- c(wadi1a.nr2.ionpneg.cormed, '90110' = NA)
+wadi1a.nr2.ionpneg.cormed <- wadi1a.nr2.ionpneg.cormed[sort(names(wadi1a.nr2.ionpneg.cormed))]
+# 90112
+wadi1a.nr2.rppos.cormed <- c(wadi1a.nr2.rppos.cormed, '90112' = NA)
+wadi1a.nr2.rppos.cormed <- wadi1a.nr2.rppos.cormed[sort(names(wadi1a.nr2.rppos.cormed))]
+# 90112
+wadi1a.nr2.ionpneg.cormed <- c(wadi1a.nr2.ionpneg.cormed, '90112' = NA)
+wadi1a.nr2.ionpneg.cormed <- wadi1a.nr2.ionpneg.cormed[sort(names(wadi1a.nr2.ionpneg.cormed))]
+# 90117
+wadi1a.nr2.ionpneg.cormed <- c(wadi1a.nr2.ionpneg.cormed, '90117' = NA)
+wadi1a.nr2.ionpneg.cormed <- wadi1a.nr2.ionpneg.cormed[sort(names(wadi1a.nr2.ionpneg.cormed))]
+# 90122
+wadi1a.nr2.ionpneg.cormed <- c(wadi1a.nr2.ionpneg.cormed, '90122' = NA)
+wadi1a.nr2.ionpneg.cormed <- wadi1a.nr2.ionpneg.cormed[sort(names(wadi1a.nr2.ionpneg.cormed))]
+# 90128
+wadi1a.nr2.ionpneg.cormed <- c(wadi1a.nr2.ionpneg.cormed, '90128' = NA)
+wadi1a.nr2.ionpneg.cormed <- wadi1a.nr2.ionpneg.cormed[sort(names(wadi1a.nr2.ionpneg.cormed))]
+# 90129
+wadi1a.nr2.rppos.cormed <- c(wadi1a.nr2.rppos.cormed, '90129' = NA)
+wadi1a.nr2.rppos.cormed <- wadi1a.nr2.rppos.cormed[sort(names(wadi1a.nr2.rppos.cormed))]
+# 90129
+wadi1a.nr2.ionpneg.cormed <- c(wadi1a.nr2.ionpneg.cormed, '90129' = NA)
+wadi1a.nr2.ionpneg.cormed <- wadi1a.nr2.ionpneg.cormed[sort(names(wadi1a.nr2.ionpneg.cormed))]
+# 90134
+wadi1a.nr2.ionpneg.cormed <- c(wadi1a.nr2.ionpneg.cormed, '90134' = NA)
+wadi1a.nr2.ionpneg.cormed <- wadi1a.nr2.ionpneg.cormed[sort(names(wadi1a.nr2.ionpneg.cormed))]
+# 90135
+wadi1a.nr2.ionpneg.cormed <- c(wadi1a.nr2.ionpneg.cormed, '90135' = NA)
+wadi1a.nr2.ionpneg.cormed <- wadi1a.nr2.ionpneg.cormed[sort(names(wadi1a.nr2.ionpneg.cormed))]
+# 90140
+wadi1a.nr2.ionpneg.cormed <- c(wadi1a.nr2.ionpneg.cormed, '90140' = NA)
+wadi1a.nr2.ionpneg.cormed <- wadi1a.nr2.ionpneg.cormed[sort(names(wadi1a.nr2.ionpneg.cormed))]
+# 90146
+wadi1a.nr2.ionpneg.cormed <- c(wadi1a.nr2.ionpneg.cormed, '90146' = NA)
+wadi1a.nr2.ionpneg.cormed <- wadi1a.nr2.ionpneg.cormed[sort(names(wadi1a.nr2.ionpneg.cormed))]
+# 90148
+wadi1a.nr2.ionpneg.cormed <- c(wadi1a.nr2.ionpneg.cormed, '90148' = NA)
+wadi1a.nr2.ionpneg.cormed <- wadi1a.nr2.ionpneg.cormed[sort(names(wadi1a.nr2.ionpneg.cormed))]
+# Combine the wadi
+all(table(c(names(wadi1a.nr2.rppos.cormed), names(wadi1a.nr2.rpneg.cormed), names(wadi1a.nr2.ionpneg.cormed))) == 3)
+if(all(table(c(names(wadi1a.nr2.rppos.cormed), names(wadi1a.nr2.rpneg.cormed), names(wadi1a.nr2.ionpneg.cormed))) == 3)){
+  if(all(names(wadi1a.nr2.rppos.cormed) == names(wadi1a.nr2.rpneg.cormed)) & 
+     all(names(wadi1a.nr2.rpneg.cormed) == names(wadi1a.nr2.ionpneg.cormed))){
+    wadi1a.nr2.cormed <- as.matrix(data.frame(rppos = wadi1a.nr2.rppos.cormed, 
+                                              rpneg = wadi1a.nr2.rpneg.cormed, 
+                                              ionpneg = wadi1a.nr2.ionpneg.cormed))
+  }
+}
+
+# liv
+all(table(c(names(liv1a.nr2.rppos.cormed), names(liv1a.nr2.rpneg.cormed), names(liv1a.nr2.ionpneg.cormed))) == 3)
+if(all(table(c(names(liv1a.nr2.rppos.cormed), names(liv1a.nr2.rpneg.cormed), names(liv1a.nr2.ionpneg.cormed))) == 3)){
+  if(all(names(liv1a.nr2.rppos.cormed) == names(liv1a.nr2.rpneg.cormed)) & 
+     all(names(liv1a.nr2.rpneg.cormed) == names(liv1a.nr2.ionpneg.cormed))){
+    liv1a.nr2.cormed <- as.matrix(data.frame(rppos = liv1a.nr2.rppos.cormed, 
+                                             rpneg = liv1a.nr2.rpneg.cormed, 
+                                             ionpneg = liv1a.nr2.ionpneg.cormed))
+  }
+}
+
+# hrt
+all(table(c(names(hrt1a.nr2.rppos.cormed), names(hrt1a.nr2.rpneg.cormed), names(hrt1a.nr2.ionpneg.cormed))) == 3)
+if(all(table(c(names(hrt1a.nr2.rppos.cormed), names(hrt1a.nr2.rpneg.cormed), names(hrt1a.nr2.ionpneg.cormed))) == 3)){
+  if(all(names(hrt1a.nr2.rppos.cormed) == names(hrt1a.nr2.rpneg.cormed)) & 
+     all(names(hrt1a.nr2.rpneg.cormed) == names(hrt1a.nr2.ionpneg.cormed))){
+    hrt1a.nr2.cormed <- as.matrix(data.frame(rppos = hrt1a.nr2.rppos.cormed, 
+                                             rpneg = hrt1a.nr2.rpneg.cormed, 
+                                             ionpneg = hrt1a.nr2.ionpneg.cormed))
+  }
+}
+
+# lun
+all(table(c(names(lun1a.nr2.rppos.cormed), names(lun1a.nr2.rpneg.cormed), names(lun1a.nr2.ionpneg.cormed))) == 3)
+if(all(table(c(names(lun1a.nr2.rppos.cormed), names(lun1a.nr2.rpneg.cormed), names(lun1a.nr2.ionpneg.cormed))) == 3)){
+  if(all(names(lun1a.nr2.rppos.cormed) == names(lun1a.nr2.rpneg.cormed)) & 
+     all(names(lun1a.nr2.rpneg.cormed) == names(lun1a.nr2.ionpneg.cormed))){
+    lun1a.nr2.cormed <- as.matrix(data.frame(rppos = lun1a.nr2.rppos.cormed, 
+                                             rpneg = lun1a.nr2.rpneg.cormed, 
+                                             ionpneg = lun1a.nr2.ionpneg.cormed))
+  }
+}
+
+# pla
+if(all(table(c(names(pla1a.nr2.rppos.cormed), names(pla1a.nr2.rpneg.cormed), names(pla1a.nr2.ionpneg.cormed))) == 3)){
+  if(all(names(pla1a.nr2.rppos.cormed) == names(pla1a.nr2.rpneg.cormed)) & 
+     all(names(pla1a.nr2.rpneg.cormed) == names(pla1a.nr2.ionpneg.cormed))){
+    pla1a.nr2.cormed <- as.matrix(data.frame(rppos = pla1a.nr2.rppos.cormed, 
+                                             rpneg = pla1a.nr2.rpneg.cormed, 
+                                             ionpneg = pla1a.nr2.ionpneg.cormed))
+  }
+}
+```
+
+### Create tissue matrices of sample correlation medians: bids by technology (pass1c)
+```{r}
+# PASS1c
+############################
+# gas
+# 90757 is duplicated
+n <- which(grepl('90757', names(gas1c.nr2.rppos.cormed)))[2]
+gas1c.nr2.rppos.cormed <- gas1c.nr2.rppos.cormed[-n]
+if(all(table(c(names(gas1c.nr2.rppos.cormed), names(gas1c.nr2.rpneg.cormed), names(gas1c.nr2.ionpneg.cormed))) == 3)){
+  if(names(gas1c.nr2.rppos.cormed) == names(gas1c.nr2.rpneg.cormed) & 
+     names(gas1c.nr2.rpneg.cormed) == names(gas1c.nr2.ionpneg.cormed)){
+    gas1c.nr2.cormed <- as.matrix(data.frame(rppos = gas1c.nr2.rppos.cormed, 
+                                             rpneg = gas1c.nr2.rpneg.cormed, 
+                                             ionpneg = gas1c.nr2.ionpneg.cormed))
+  }
+}
+# kid
+# 90801 is duplicated
+n <- which(grepl('90801', names(kid1c.nr2.ionpneg.cormed)))[2]
+kid1c.nr2.ionpneg.cormed <- kid1c.nr2.ionpneg.cormed[-n]
+all(table(c(names(kid1c.nr2.rppos.cormed), names(kid1c.nr2.rpneg.cormed), names(kid1c.nr2.ionpneg.cormed))) == 3)
+if(all(table(c(names(kid1c.nr2.rppos.cormed), names(kid1c.nr2.rpneg.cormed), names(kid1c.nr2.ionpneg.cormed))) == 3)){
+  print('kid: names check out')
+  if(names(kid1c.nr2.rppos.cormed) == names(kid1c.nr2.rpneg.cormed) & 
+     names(kid1c.nr2.rpneg.cormed) == names(kid1c.nr2.ionpneg.cormed)){
+    kid1c.nr2.cormed <- as.matrix(data.frame(rppos = kid1c.nr2.rppos.cormed, 
+                                             rpneg = kid1c.nr2.rpneg.cormed, 
+                                             ionpneg = kid1c.nr2.ionpneg.cormed))
+  }
+}
+# wadi
+# 90743 is duplicated
+n <- which(grepl('90743', names(wadi1c.nr2.rppos.cormed)))[2]
+wadi1c.nr2.rppos.cormed <- wadi1c.nr2.rppos.cormed[-n]
+all(table(c(names(wadi1c.nr2.rppos.cormed), names(wadi1c.nr2.rpneg.cormed), names(wadi1c.nr2.ionpneg.cormed))) == 3)
+if(all(table(c(names(wadi1c.nr2.rppos.cormed), names(wadi1c.nr2.rpneg.cormed), names(wadi1c.nr2.ionpneg.cormed))) == 3)){
+  if(names(wadi1c.nr2.rppos.cormed) == names(wadi1c.nr2.rpneg.cormed) & 
+     names(wadi1c.nr2.rpneg.cormed) == names(wadi1c.nr2.ionpneg.cormed)){
+    wadi1c.nr2.cormed <- as.matrix(data.frame(rppos = wadi1c.nr2.rppos.cormed, 
+                                              rpneg = wadi1c.nr2.rpneg.cormed, 
+                                              ionpneg = wadi1c.nr2.ionpneg.cormed))
+  }
+}
+# liv
+all(table(c(names(liv1c.nr2.rppos.cormed), names(liv1c.nr2.rpneg.cormed), names(liv1c.nr2.ionpneg.cormed))) == 3)
+if(all(table(c(names(liv1c.nr2.rppos.cormed), names(liv1c.nr2.rpneg.cormed), names(liv1c.nr2.ionpneg.cormed))) == 3)){
+  if(names(liv1c.nr2.rppos.cormed) == names(liv1c.nr2.rpneg.cormed) & 
+     names(liv1c.nr2.rpneg.cormed) == names(liv1c.nr2.ionpneg.cormed)){
+    liv1c.nr2.cormed <- as.matrix(data.frame(rppos = liv1c.nr2.rppos.cormed, 
+                                             rpneg = liv1c.nr2.rpneg.cormed, 
+                                             ionpneg = liv1c.nr2.ionpneg.cormed))
+  }
+}
+# hrt
+if(all(table(c(names(hrt1c.nr2.rppos.cormed), names(hrt1c.nr2.rpneg.cormed), names(hrt1c.nr2.ionpneg.cormed))) == 3)){
+  if(names(hrt1c.nr2.rppos.cormed) == names(hrt1c.nr2.rpneg.cormed) & 
+     names(hrt1c.nr2.rpneg.cormed) == names(hrt1c.nr2.ionpneg.cormed)){
+    hrt1c.nr2.cormed <- as.matrix(data.frame(rppos = hrt1c.nr2.rppos.cormed, 
+                                             rpneg = hrt1c.nr2.rpneg.cormed, 
+                                             ionpneg = hrt1c.nr2.ionpneg.cormed))
+  }
+}
+# lun
+# 90750 is missing
+lun1c.nr2.rppos.cormed <- c(lun1c.nr2.rppos.cormed, '90750' = NA)
+lun1c.nr2.rppos.cormed <- lun1c.nr2.rppos.cormed[sort(names(lun1c.nr2.rppos.cormed))]
+
+#lun1c.nr2.rppos.cormed <- lun1c.nr2.rppos.cormed[-14]
+all(table(c(names(lun1c.nr2.rppos.cormed), names(lun1c.nr2.rpneg.cormed), names(lun1c.nr2.ionpneg.cormed))) == 3)
+if(all(table(c(names(lun1c.nr2.rppos.cormed), names(lun1c.nr2.rpneg.cormed), names(lun1c.nr2.ionpneg.cormed))) == 3)){
+  if(names(lun1c.nr2.rppos.cormed) == names(lun1c.nr2.rpneg.cormed) & 
+     names(lun1c.nr2.rpneg.cormed) == names(lun1c.nr2.ionpneg.cormed)){
+    lun1c.nr2.cormed <- as.matrix(data.frame(rppos = lun1c.nr2.rppos.cormed, 
+                                             rpneg = lun1c.nr2.rpneg.cormed, 
+                                             ionpneg = lun1c.nr2.ionpneg.cormed))
+  }
+}
+# pla
+if(all(table(c(names(pla1c.nr2.rppos.cormed), names(pla1c.nr2.rpneg.cormed), names(pla1c.nr2.ionpneg.cormed))) == 3)){
+  if(names(pla1c.nr2.rppos.cormed) == names(pla1c.nr2.rpneg.cormed) & 
+     names(pla1c.nr2.rpneg.cormed) == names(pla1c.nr2.ionpneg.cormed)){
+    pla1c.nr2.cormed <- as.matrix(data.frame(rppos = pla1c.nr2.rppos.cormed, 
+                                             rpneg = pla1c.nr2.rpneg.cormed, 
+                                             ionpneg = pla1c.nr2.ionpneg.cormed))
+  }
+}
+```
+
+# Generate matrices of sample medians, correlation medians, sample order, sex, control, & time
+
+## rppos pass1a
+
+### Sample medians, correlation medians, sample order, sex, control, & time (gas rppos pass1a)
+```{r}
+if( all(names(gas1a.nr2.rppos.med) == names(gas1a.nr2.rppos.cormed)) &
+    all(gas1a.rppos.s[,1] == names(gas1a.nr2.rppos.cormed)) ){
+  gas1a_rppos.sum <- cbind(gas1a.rppos.s, gas1a.nr2.rppos.med, gas1a.nr2.rppos.cormed)[,-1]
+  colnames(gas1a_rppos.sum)[5] <- 'sample_med'
+  colnames(gas1a_rppos.sum)[6] <- 'sample_cormed'
+}
+gas1a_rppos.sum.cor<-cor(gas1a_rppos.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(gas1a_rppos.sum.cor, col=redblue100,axes=FALSE, main=glue("gas2 rppos pass1a"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+gas1a_rppos.sum.cor.p <- cor.mtest(gas1a_rppos.sum, method = 'spearman')
+# Plot
+corrplot(rotate(gas1a_rppos.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(gas1a_rppos.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(gas1a_rppos.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (kid rppos pass1a)
+```{r}
+if( all(names(kid1a.nr2.rppos.med) == names(kid1a.nr2.rppos.cormed)) &
+    all(kid1a.rppos.s[,1] == names(kid1a.nr2.rppos.cormed)) ){
+  kid1a_rppos.sum <- cbind(kid1a.rppos.s, kid1a.nr2.rppos.med, kid1a.nr2.rppos.cormed)[,-1]
+  colnames(kid1a_rppos.sum)[5] <- 'sample_med'
+  colnames(kid1a_rppos.sum)[6] <- 'sample_cormed'
+}
+kid1a_rppos.sum.cor<-cor(kid1a_rppos.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(kid1a_rppos.sum.cor, col=redblue100,axes=FALSE, main=glue("kid2 rppos pass1a"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+kid1a_rppos.sum.cor.p <- cor.mtest(kid1a_rppos.sum, method = 'spearman')
+# Plot
+corrplot(rotate(kid1a_rppos.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(kid1a_rppos.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(kid1a_rppos.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (wadi rppos pass1a)
+```{r}
+df <- data.frame(bid = names(wadi1a.nr2.rppos.cormed)[!names(wadi1a.nr2.rppos.cormed) %in% wadi1a.rppos.s[,1]],
+           sample_order = NA, sex = NA, control = NA, time = NA)
+wadi1a.rppos.s <- rbind(df, as.data.frame(wadi1a.rppos.s)) %>% arrange(bid) %>% mutate(bid = as.numeric(bid)) %>% as.matrix()
+
+if( all(names(wadi1a.nr2.rppos.med) == names(wadi1a.nr2.rppos.cormed)) &
+    all(wadi1a.rppos.s[,1] == names(wadi1a.nr2.rppos.cormed)) ){
+  wadi1a_rppos.sum <- cbind(wadi1a.rppos.s, wadi1a.nr2.rppos.med, wadi1a.nr2.rppos.cormed)[,-1]
+  colnames(wadi1a_rppos.sum)[5] <- 'sample_med'
+  colnames(wadi1a_rppos.sum)[6] <- 'sample_cormed'
+}
+
+wadi1a_rppos.sum.cor<-cor(wadi1a_rppos.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(wadi1a_rppos.sum.cor, col=redblue100,axes=FALSE, main=glue("wadi2 rppos pass1a"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+wadi1a_rppos.sum.cor.p <- cor.mtest(wadi1a_rppos.sum, method = 'spearman')
+# Plot
+corrplot(rotate(wadi1a_rppos.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(wadi1a_rppos.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(wadi1a_rppos.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (liv rppos pass1a)
+```{r}
+if( all(names(liv1a.nr2.rppos.med) == names(liv1a.nr2.rppos.cormed)) &
+    all(liv1a.rppos.s[,1] == names(liv1a.nr2.rppos.cormed)) ){
+  liv1a_rppos.sum <- cbind(liv1a.rppos.s, liv1a.nr2.rppos.med, liv1a.nr2.rppos.cormed)[,-1]
+  colnames(liv1a_rppos.sum)[5] <- 'sample_med'
+  colnames(liv1a_rppos.sum)[6] <- 'sample_cormed'
+}
+liv1a_rppos.sum.cor<-cor(liv1a_rppos.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(liv1a_rppos.sum.cor, col=redblue100,axes=FALSE, main=glue("liv2 rppos pass1a"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+liv1a_rppos.sum.cor.p <- cor.mtest(liv1a_rppos.sum, method = 'spearman')
+# Plot
+corrplot(rotate(liv1a_rppos.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(liv1a_rppos.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(liv1a_rppos.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (hrt rppos pass1a)
+```{r}
+if( all(names(hrt1a.nr2.rppos.med) == names(hrt1a.nr2.rppos.cormed)) &
+    all(hrt1a.rppos.s[,1] == names(hrt1a.nr2.rppos.cormed)) ){
+  hrt1a_rppos.sum <- cbind(hrt1a.rppos.s, hrt1a.nr2.rppos.med, hrt1a.nr2.rppos.cormed)[,-1]
+  colnames(hrt1a_rppos.sum)[5] <- 'sample_med'
+  colnames(hrt1a_rppos.sum)[6] <- 'sample_cormed'
+}
+hrt1a_rppos.sum.cor<-cor(hrt1a_rppos.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(hrt1a_rppos.sum.cor, col=redblue100,axes=FALSE, main=glue("hrt2 rppos pass1a"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+hrt1a_rppos.sum.cor.p <- cor.mtest(hrt1a_rppos.sum, method = 'spearman')
+# Plot
+corrplot(rotate(hrt1a_rppos.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(hrt1a_rppos.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(hrt1a_rppos.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (lun rppos pass1a)
+```{r}
+if( all(names(lun1a.nr2.rppos.med) == names(lun1a.nr2.rppos.cormed)) &
+    all(lun1a.rppos.s[,1] == names(lun1a.nr2.rppos.cormed)) ){
+  lun1a_rppos.sum <- cbind(lun1a.rppos.s, lun1a.nr2.rppos.med, lun1a.nr2.rppos.cormed)[,-1]
+  colnames(lun1a_rppos.sum)[5] <- 'sample_med'
+  colnames(lun1a_rppos.sum)[6] <- 'sample_cormed'
+}
+lun1a_rppos.sum.cor<-cor(lun1a_rppos.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(lun1a_rppos.sum.cor, col=redblue100,axes=FALSE, main=glue("lun2 rppos pass1a"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+lun1a_rppos.sum.cor.p <- cor.mtest(lun1a_rppos.sum, method = 'spearman')
+# Plot
+corrplot(rotate(lun1a_rppos.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(lun1a_rppos.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(lun1a_rppos.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (pla rppos pass1a)
+```{r}
+if( all(names(pla1a.nr2.rppos.med) == names(pla1a.nr2.rppos.cormed)) &
+    all(pla1a.rppos.s[,1] == names(pla1a.nr2.rppos.cormed)) ){
+  pla1a_rppos.sum <- cbind(pla1a.rppos.s, pla1a.nr2.rppos.med, pla1a.nr2.rppos.cormed)[,-1]
+  colnames(pla1a_rppos.sum)[5] <- 'sample_med'
+  colnames(pla1a_rppos.sum)[6] <- 'sample_cormed'
+}
+pla1a_rppos.sum.cor<-cor(pla1a_rppos.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(pla1a_rppos.sum.cor, col=redblue100,axes=FALSE, main=glue("pla2 rppos pass1a"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+pla1a_rppos.sum.cor.p <- cor.mtest(pla1a_rppos.sum, method = 'spearman')
+# Plot
+corrplot(rotate(pla1a_rppos.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(pla1a_rppos.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(pla1a_rppos.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Compare the pan-tissue plots (rppos pass1a)
+```{r}
+par(mfrow=c(2,3),mar=c(0,0,0,0))
+corrplot(rotate(gas1a_rppos.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="gas2 rppos pass1a",number.cex=1)
+corrplot(rotate(kid1a_rppos.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="kid2 rppos pass1a",number.cex=1)
+corrplot(rotate(wadi1a_rppos.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="wadi2 rppos pass1a",number.cex=1)
+corrplot(rotate(liv1a_rppos.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="liv2 rppos pass1a",number.cex=1)
+corrplot(rotate(hrt1a_rppos.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="hrt2 rppos pass1a",number.cex=1)
+corrplot(rotate(lun1a_rppos.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="lun2 rppos pass1a",number.cex=1)
+par(mfrow=c(2,3),mar=c(0,0,0,0))
+corrplot(rotate(pla1a_rppos.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="pla2 rppos pass1a",number.cex=1)
+```
+
+## rpneg pass1a
+
+### Sample medians, correlation medians, sample order, sex, control, & time (gas rpneg pass1a)
+```{r}
+if( all(names(gas1a.nr2.rpneg.med) == names(gas1a.nr2.rpneg.cormed)) &
+    all(gas1a.rpneg.s[,1] == names(gas1a.nr2.rpneg.cormed)) ){
+  gas1a_rpneg.sum <- cbind(gas1a.rpneg.s, gas1a.nr2.rpneg.med, gas1a.nr2.rpneg.cormed)[,-1]
+  colnames(gas1a_rpneg.sum)[5] <- 'sample_med'
+  colnames(gas1a_rpneg.sum)[6] <- 'sample_cormed'
+}
+gas1a_rpneg.sum.cor<-cor(gas1a_rpneg.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(gas1a_rpneg.sum.cor, col=redblue100,axes=FALSE, main=glue("gas2 rpneg pass1a"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+gas1a_rpneg.sum.cor.p <- cor.mtest(gas1a_rpneg.sum, method = 'spearman')
+# Plot
+corrplot(rotate(gas1a_rpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(gas1a_rpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(gas1a_rpneg.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (kid rpneg pass1a)
+```{r}
+if( all(names(kid1a.nr2.rpneg.med) == names(kid1a.nr2.rpneg.cormed)) &
+    all(kid1a.rpneg.s[,1] == names(kid1a.nr2.rpneg.cormed)) ){
+  kid1a_rpneg.sum <- cbind(kid1a.rpneg.s, kid1a.nr2.rpneg.med, kid1a.nr2.rpneg.cormed)[,-1]
+  colnames(kid1a_rpneg.sum)[5] <- 'sample_med'
+  colnames(kid1a_rpneg.sum)[6] <- 'sample_cormed'
+}
+kid1a_rpneg.sum.cor<-cor(kid1a_rpneg.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(kid1a_rpneg.sum.cor, col=redblue100,axes=FALSE, main=glue("kid2 rpneg pass1a"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+kid1a_rpneg.sum.cor.p <- cor.mtest(kid1a_rpneg.sum, method = 'spearman')
+# Plot
+corrplot(rotate(kid1a_rpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(kid1a_rpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(kid1a_rpneg.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (wadi rpneg pass1a)
+```{r}
+if( all(names(wadi1a.nr2.rpneg.med) == names(wadi1a.nr2.rpneg.cormed)) &
+    all(wadi1a.rpneg.s[,1] == names(wadi1a.nr2.rpneg.cormed)) ){
+  wadi1a_rpneg.sum <- cbind(wadi1a.rpneg.s, wadi1a.nr2.rpneg.med, wadi1a.nr2.rpneg.cormed)[,-1]
+  colnames(wadi1a_rpneg.sum)[5] <- 'sample_med'
+  colnames(wadi1a_rpneg.sum)[6] <- 'sample_cormed'
+}
+
+wadi1a_rpneg.sum.cor<-cor(wadi1a_rpneg.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(wadi1a_rpneg.sum.cor, col=redblue100,axes=FALSE, main=glue("wadi2 rpneg pass1a"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+wadi1a_rpneg.sum.cor.p <- cor.mtest(wadi1a_rpneg.sum, method = 'spearman')
+# Plot
+corrplot(rotate(wadi1a_rpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(wadi1a_rpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(wadi1a_rpneg.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (liv rpneg pass1a)
+```{r}
+if( all(names(liv1a.nr2.rpneg.med) == names(liv1a.nr2.rpneg.cormed)) &
+    all(liv1a.rpneg.s[,1] == names(liv1a.nr2.rpneg.cormed)) ){
+  liv1a_rpneg.sum <- cbind(liv1a.rpneg.s, liv1a.nr2.rpneg.med, liv1a.nr2.rpneg.cormed)[,-1]
+  colnames(liv1a_rpneg.sum)[5] <- 'sample_med'
+  colnames(liv1a_rpneg.sum)[6] <- 'sample_cormed'
+}
+liv1a_rpneg.sum.cor<-cor(liv1a_rpneg.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(liv1a_rpneg.sum.cor, col=redblue100,axes=FALSE, main=glue("liv2 rpneg pass1a"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+liv1a_rpneg.sum.cor.p <- cor.mtest(liv1a_rpneg.sum, method = 'spearman')
+# Plot
+corrplot(rotate(liv1a_rpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(liv1a_rpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(liv1a_rpneg.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (hrt rpneg pass1a)
+```{r}
+if( all(names(hrt1a.nr2.rpneg.med) == names(hrt1a.nr2.rpneg.cormed)) &
+    all(hrt1a.rpneg.s[,1] == names(hrt1a.nr2.rpneg.cormed)) ){
+  hrt1a_rpneg.sum <- cbind(hrt1a.rpneg.s, hrt1a.nr2.rpneg.med, hrt1a.nr2.rpneg.cormed)[,-1]
+  colnames(hrt1a_rpneg.sum)[5] <- 'sample_med'
+  colnames(hrt1a_rpneg.sum)[6] <- 'sample_cormed'
+}
+hrt1a_rpneg.sum.cor<-cor(hrt1a_rpneg.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(hrt1a_rpneg.sum.cor, col=redblue100,axes=FALSE, main=glue("hrt2 rpneg pass1a"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+hrt1a_rpneg.sum.cor.p <- cor.mtest(hrt1a_rpneg.sum, method = 'spearman')
+# Plot
+corrplot(rotate(hrt1a_rpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(hrt1a_rpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(hrt1a_rpneg.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (lun rpneg pass1a)
+```{r}
+if( all(names(lun1a.nr2.rpneg.med) == names(lun1a.nr2.rpneg.cormed)) &
+    all(lun1a.rpneg.s[,1] == names(lun1a.nr2.rpneg.cormed)) ){
+  lun1a_rpneg.sum <- cbind(lun1a.rpneg.s, lun1a.nr2.rpneg.med, lun1a.nr2.rpneg.cormed)[,-1]
+  colnames(lun1a_rpneg.sum)[5] <- 'sample_med'
+  colnames(lun1a_rpneg.sum)[6] <- 'sample_cormed'
+}
+lun1a_rpneg.sum.cor<-cor(lun1a_rpneg.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(lun1a_rpneg.sum.cor, col=redblue100,axes=FALSE, main=glue("lun2 rpneg pass1a"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+lun1a_rpneg.sum.cor.p <- cor.mtest(lun1a_rpneg.sum, method = 'spearman')
+# Plot
+corrplot(rotate(lun1a_rpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(lun1a_rpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(lun1a_rpneg.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (pla rpneg pass1a)
+```{r}
+if( all(names(pla1a.nr2.rpneg.med) == names(pla1a.nr2.rpneg.cormed)) &
+    all(pla1a.rpneg.s[,1] == names(pla1a.nr2.rpneg.cormed)) ){
+  pla1a_rpneg.sum <- cbind(pla1a.rpneg.s, pla1a.nr2.rpneg.med, pla1a.nr2.rpneg.cormed)[,-1]
+  colnames(pla1a_rpneg.sum)[5] <- 'sample_med'
+  colnames(pla1a_rpneg.sum)[6] <- 'sample_cormed'
+}
+pla1a_rpneg.sum.cor<-cor(pla1a_rpneg.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(pla1a_rpneg.sum.cor, col=redblue100,axes=FALSE, main=glue("pla2 rpneg pass1a"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+pla1a_rpneg.sum.cor.p <- cor.mtest(pla1a_rpneg.sum, method = 'spearman')
+# Plot
+corrplot(rotate(pla1a_rpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(pla1a_rpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(pla1a_rpneg.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Compare the pan-tissue plots (rpneg pass1a)
+```{r}
+par(mfrow=c(2,3),mar=c(0,0,0,0))
+corrplot(rotate(gas1a_rpneg.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="gas2 rpneg pass1a",number.cex=1)
+corrplot(rotate(kid1a_rpneg.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="kid2 rpneg pass1a",number.cex=1)
+corrplot(rotate(wadi1a_rpneg.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="wadi2 rpneg pass1a",number.cex=1)
+corrplot(rotate(liv1a_rpneg.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="liv2 rpneg pass1a",number.cex=1)
+corrplot(rotate(hrt1a_rpneg.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="hrt2 rpneg pass1a",number.cex=1)
+corrplot(rotate(lun1a_rpneg.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="lun2 rpneg pass1a",number.cex=1)
+par(mfrow=c(2,3),mar=c(0,0,0,0))
+corrplot(rotate(pla1a_rpneg.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="pla2 rpneg pass1a",number.cex=1)
+```
+
+## ionpneg pass1a
+
+### Sample medians, correlation medians, sample order, sex, control, & time (gas ionpneg pass1a)
+```{r}
+if( all(names(gas1a.nr2.ionpneg.med) == names(gas1a.nr2.ionpneg.cormed)) &
+    all(gas1a.ionpneg.s[,1] == names(gas1a.nr2.ionpneg.cormed)) ){
+  gas1a_ionpneg.sum <- cbind(gas1a.ionpneg.s, gas1a.nr2.ionpneg.med, gas1a.nr2.ionpneg.cormed)[,-1]
+  colnames(gas1a_ionpneg.sum)[5] <- 'sample_med'
+  colnames(gas1a_ionpneg.sum)[6] <- 'sample_cormed'
+}
+gas1a_ionpneg.sum.cor<-cor(gas1a_ionpneg.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(gas1a_ionpneg.sum.cor, col=redblue100,axes=FALSE, main=glue("gas2 ionpneg pass1a"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+gas1a_ionpneg.sum.cor.p <- cor.mtest(gas1a_ionpneg.sum, method = 'spearman')
+# Plot
+corrplot(rotate(gas1a_ionpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(gas1a_ionpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(gas1a_ionpneg.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (kid ionpneg pass1a)
+```{r}
+if( all(names(kid1a.nr2.ionpneg.med) == names(kid1a.nr2.ionpneg.cormed)) &
+    all(kid1a.ionpneg.s[,1] == names(kid1a.nr2.ionpneg.cormed)) ){
+  kid1a_ionpneg.sum <- cbind(kid1a.ionpneg.s, kid1a.nr2.ionpneg.med, kid1a.nr2.ionpneg.cormed)[,-1]
+  colnames(kid1a_ionpneg.sum)[5] <- 'sample_med'
+  colnames(kid1a_ionpneg.sum)[6] <- 'sample_cormed'
+}
+kid1a_ionpneg.sum.cor<-cor(kid1a_ionpneg.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(kid1a_ionpneg.sum.cor, col=redblue100,axes=FALSE, main=glue("kid2 ionpneg pass1a"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+kid1a_ionpneg.sum.cor.p <- cor.mtest(kid1a_ionpneg.sum, method = 'spearman')
+# Plot
+corrplot(rotate(kid1a_ionpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(kid1a_ionpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(kid1a_ionpneg.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (wadi ionpneg pass1a)
+```{r}
+df <- data.frame(bid = names(wadi1a.nr2.ionpneg.cormed)[!names(wadi1a.nr2.ionpneg.cormed) %in% wadi1a.ionpneg.s[,1]],
+           sample_order = NA, sex = NA, control = NA, time = NA)
+wadi1a.ionpneg.s <- rbind(df, as.data.frame(wadi1a.ionpneg.s)) %>% arrange(bid) %>% mutate(bid = as.numeric(bid)) %>% as.matrix()
+
+if( all(names(wadi1a.nr2.ionpneg.med) == names(wadi1a.nr2.ionpneg.cormed)) &
+    all(wadi1a.ionpneg.s[,1] == names(wadi1a.nr2.ionpneg.cormed)) ){
+  wadi1a_ionpneg.sum <- cbind(wadi1a.ionpneg.s, wadi1a.nr2.ionpneg.med, wadi1a.nr2.ionpneg.cormed)[,-1]
+  colnames(wadi1a_ionpneg.sum)[5] <- 'sample_med'
+  colnames(wadi1a_ionpneg.sum)[6] <- 'sample_cormed'
+}
+
+wadi1a_ionpneg.sum.cor<-cor(wadi1a_ionpneg.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(wadi1a_ionpneg.sum.cor, col=redblue100,axes=FALSE, main=glue("wadi2 ionpneg pass1a"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+wadi1a_ionpneg.sum.cor.p <- cor.mtest(wadi1a_ionpneg.sum, method = 'spearman')
+# Plot
+corrplot(rotate(wadi1a_ionpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(wadi1a_ionpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(wadi1a_ionpneg.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (liv ionpneg pass1a)
+```{r}
+if( all(names(liv1a.nr2.ionpneg.med) == names(liv1a.nr2.ionpneg.cormed)) &
+    all(liv1a.ionpneg.s[,1] == names(liv1a.nr2.ionpneg.cormed)) ){
+  liv1a_ionpneg.sum <- cbind(liv1a.ionpneg.s, liv1a.nr2.ionpneg.med, liv1a.nr2.ionpneg.cormed)[,-1]
+  colnames(liv1a_ionpneg.sum)[5] <- 'sample_med'
+  colnames(liv1a_ionpneg.sum)[6] <- 'sample_cormed'
+}
+liv1a_ionpneg.sum.cor<-cor(liv1a_ionpneg.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(liv1a_ionpneg.sum.cor, col=redblue100,axes=FALSE, main=glue("liv2 ionpneg pass1a"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+liv1a_ionpneg.sum.cor.p <- cor.mtest(liv1a_ionpneg.sum, method = 'spearman')
+# Plot
+corrplot(rotate(liv1a_ionpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(liv1a_ionpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(liv1a_ionpneg.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (hrt ionpneg pass1a)
+```{r}
+if( all(names(hrt1a.nr2.ionpneg.med) == names(hrt1a.nr2.ionpneg.cormed)) &
+    all(hrt1a.ionpneg.s[,1] == names(hrt1a.nr2.ionpneg.cormed)) ){
+  hrt1a_ionpneg.sum <- cbind(hrt1a.ionpneg.s, hrt1a.nr2.ionpneg.med, hrt1a.nr2.ionpneg.cormed)[,-1]
+  colnames(hrt1a_ionpneg.sum)[5] <- 'sample_med'
+  colnames(hrt1a_ionpneg.sum)[6] <- 'sample_cormed'
+}
+hrt1a_ionpneg.sum.cor<-cor(hrt1a_ionpneg.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(hrt1a_ionpneg.sum.cor, col=redblue100,axes=FALSE, main=glue("hrt2 ionpneg pass1a"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+hrt1a_ionpneg.sum.cor.p <- cor.mtest(hrt1a_ionpneg.sum, method = 'spearman')
+# Plot
+corrplot(rotate(hrt1a_ionpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(hrt1a_ionpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(hrt1a_ionpneg.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (lun ionpneg pass1a)
+```{r}
+if( all(names(lun1a.nr2.ionpneg.med) == names(lun1a.nr2.ionpneg.cormed)) &
+    all(lun1a.ionpneg.s[,1] == names(lun1a.nr2.ionpneg.cormed)) ){
+  lun1a_ionpneg.sum <- cbind(lun1a.ionpneg.s, lun1a.nr2.ionpneg.med, lun1a.nr2.ionpneg.cormed)[,-1]
+  colnames(lun1a_ionpneg.sum)[5] <- 'sample_med'
+  colnames(lun1a_ionpneg.sum)[6] <- 'sample_cormed'
+}
+lun1a_ionpneg.sum.cor<-cor(lun1a_ionpneg.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(lun1a_ionpneg.sum.cor, col=redblue100,axes=FALSE, main=glue("lun2 ionpneg pass1a"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+lun1a_ionpneg.sum.cor.p <- cor.mtest(lun1a_ionpneg.sum, method = 'spearman')
+# Plot
+corrplot(rotate(lun1a_ionpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(lun1a_ionpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(lun1a_ionpneg.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (pla ionpneg pass1a)
+```{r}
+if( all(names(pla1a.nr2.ionpneg.med) == names(pla1a.nr2.ionpneg.cormed)) &
+    all(pla1a.ionpneg.s[,1] == names(pla1a.nr2.ionpneg.cormed)) ){
+  pla1a_ionpneg.sum <- cbind(pla1a.ionpneg.s, pla1a.nr2.ionpneg.med, pla1a.nr2.ionpneg.cormed)[,-1]
+  colnames(pla1a_ionpneg.sum)[5] <- 'sample_med'
+  colnames(pla1a_ionpneg.sum)[6] <- 'sample_cormed'
+}
+pla1a_ionpneg.sum.cor<-cor(pla1a_ionpneg.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(pla1a_ionpneg.sum.cor, col=redblue100,axes=FALSE, main=glue("pla2 ionpneg pass1a"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+pla1a_ionpneg.sum.cor.p <- cor.mtest(pla1a_ionpneg.sum, method = 'spearman')
+# Plot
+corrplot(rotate(pla1a_ionpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(pla1a_ionpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(pla1a_ionpneg.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Compare the pan-tissue plots (ionpneg pass1a)
+```{r}
+par(mfrow=c(2,3),mar=c(0,0,0,0))
+corrplot(rotate(gas1a_ionpneg.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="gas2 ionpneg pass1a",number.cex=1)
+corrplot(rotate(kid1a_ionpneg.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="kid2 ionpneg pass1a",number.cex=1)
+corrplot(rotate(wadi1a_ionpneg.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="wadi2 ionpneg pass1a",number.cex=1)
+corrplot(rotate(liv1a_ionpneg.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="liv2 ionpneg pass1a",number.cex=1)
+corrplot(rotate(hrt1a_ionpneg.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="hrt2 ionpneg pass1a",number.cex=1)
+corrplot(rotate(lun1a_ionpneg.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="lun2 ionpneg pass1a",number.cex=1)
+par(mfrow=c(2,3),mar=c(0,0,0,0))
+corrplot(rotate(pla1a_ionpneg.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="pla2 ionpneg pass1a",number.cex=1)
+```
+
+## rppos pass1c
+
+### Sample medians, correlation medians, sample order, sex, control, & time (gas rppos pass1c)
+```{r}
+df <- data.frame(bid = names(gas1c.nr2.rppos.cormed)[!names(gas1c.nr2.rppos.cormed) %in% gas1c.rppos.s[,1]],
+           sample_order = NA, sex = NA, control = NA, time = NA)
+gas1c.rppos.s <- rbind(df, as.data.frame(gas1c.rppos.s)) %>% arrange(bid) %>% mutate(bid = as.numeric(bid)) %>% as.matrix()
+
+if( all(names(gas1c.nr2.rppos.med) == names(gas1c.nr2.rppos.cormed)) &
+    all(gas1c.rppos.s[,1] == names(gas1c.nr2.rppos.cormed)) ){
+  gas1c_rppos.sum <- cbind(gas1c.rppos.s, gas1c.nr2.rppos.med, gas1c.nr2.rppos.cormed)[,-1]
+  colnames(gas1c_rppos.sum)[5] <- 'sample_med'
+  colnames(gas1c_rppos.sum)[6] <- 'sample_cormed'
+}
+gas1c_rppos.sum.cor<-cor(gas1c_rppos.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(gas1c_rppos.sum.cor, col=redblue100,axes=FALSE, main=glue("gas2 rppos pass1c"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+gas1c_rppos.sum.cor.p <- cor.mtest(gas1c_rppos.sum, method = 'spearman')
+# Plot
+corrplot(rotate(gas1c_rppos.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(gas1c_rppos.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(gas1c_rppos.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (kid rppos pass1c)
+```{r}
+if( all(names(kid1c.nr2.rppos.med) == names(kid1c.nr2.rppos.cormed)) &
+    all(kid1c.rppos.s[,1] == names(kid1c.nr2.rppos.cormed)) ){
+  kid1c_rppos.sum <- cbind(kid1c.rppos.s, kid1c.nr2.rppos.med, kid1c.nr2.rppos.cormed)[,-1]
+  colnames(kid1c_rppos.sum)[5] <- 'sample_med'
+  colnames(kid1c_rppos.sum)[6] <- 'sample_cormed'
+}
+kid1c_rppos.sum.cor<-cor(kid1c_rppos.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(kid1c_rppos.sum.cor, col=redblue100,axes=FALSE, main=glue("kid2 rppos pass1c"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+kid1c_rppos.sum.cor.p <- cor.mtest(kid1c_rppos.sum, method = 'spearman')
+# Plot
+corrplot(rotate(kid1c_rppos.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(kid1c_rppos.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(kid1c_rppos.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (wadi rppos pass1c)
+```{r}
+df <- data.frame(bid = names(wadi1c.nr2.rppos.cormed)[!names(wadi1c.nr2.rppos.cormed) %in% wadi1c.rppos.s[,1]],
+           sample_order = NA, sex = NA, control = NA, time = NA)
+wadi1c.rppos.s <- rbind(df, as.data.frame(wadi1c.rppos.s)) %>% arrange(bid) %>% mutate(bid = as.numeric(bid)) %>% as.matrix()
+
+if( all(names(wadi1c.nr2.rppos.med) == names(wadi1c.nr2.rppos.cormed)) &
+    all(wadi1c.rppos.s[,1] == names(wadi1c.nr2.rppos.cormed)) ){
+  wadi1c_rppos.sum <- cbind(wadi1c.rppos.s, wadi1c.nr2.rppos.med, wadi1c.nr2.rppos.cormed)[,-1]
+  colnames(wadi1c_rppos.sum)[5] <- 'sample_med'
+  colnames(wadi1c_rppos.sum)[6] <- 'sample_cormed'
+}
+
+wadi1c_rppos.sum.cor<-cor(wadi1c_rppos.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(wadi1c_rppos.sum.cor, col=redblue100,axes=FALSE, main=glue("wadi2 rppos pass1c"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+wadi1c_rppos.sum.cor.p <- cor.mtest(wadi1c_rppos.sum, method = 'spearman')
+# Plot
+corrplot(rotate(wadi1c_rppos.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(wadi1c_rppos.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(wadi1c_rppos.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (liv rppos pass1c)
+```{r}
+if( all(names(liv1c.nr2.rppos.med) == names(liv1c.nr2.rppos.cormed)) &
+    all(liv1c.rppos.s[,1] == names(liv1c.nr2.rppos.cormed)) ){
+  liv1c_rppos.sum <- cbind(liv1c.rppos.s, liv1c.nr2.rppos.med, liv1c.nr2.rppos.cormed)[,-1]
+  colnames(liv1c_rppos.sum)[5] <- 'sample_med'
+  colnames(liv1c_rppos.sum)[6] <- 'sample_cormed'
+}
+liv1c_rppos.sum.cor<-cor(liv1c_rppos.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(liv1c_rppos.sum.cor, col=redblue100,axes=FALSE, main=glue("liv2 rppos pass1c"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+liv1c_rppos.sum.cor.p <- cor.mtest(liv1c_rppos.sum, method = 'spearman')
+# Plot
+corrplot(rotate(liv1c_rppos.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(liv1c_rppos.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(liv1c_rppos.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (hrt rppos pass1c)
+```{r}
+if( all(names(hrt1c.nr2.rppos.med) == names(hrt1c.nr2.rppos.cormed)) &
+    all(hrt1c.rppos.s[,1] == names(hrt1c.nr2.rppos.cormed)) ){
+  hrt1c_rppos.sum <- cbind(hrt1c.rppos.s, hrt1c.nr2.rppos.med, hrt1c.nr2.rppos.cormed)[,-1]
+  colnames(hrt1c_rppos.sum)[5] <- 'sample_med'
+  colnames(hrt1c_rppos.sum)[6] <- 'sample_cormed'
+}
+hrt1c_rppos.sum.cor<-cor(hrt1c_rppos.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(hrt1c_rppos.sum.cor, col=redblue100,axes=FALSE, main=glue("hrt2 rppos pass1c"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+hrt1c_rppos.sum.cor.p <- cor.mtest(hrt1c_rppos.sum, method = 'spearman')
+# Plot
+corrplot(rotate(hrt1c_rppos.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(hrt1c_rppos.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(hrt1c_rppos.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (lun rppos pass1c)
+```{r}
+if( all(names(lun1c.nr2.rppos.med) == names(lun1c.nr2.rppos.cormed)) &
+    all(lun1c.rppos.s[,1] == names(lun1c.nr2.rppos.cormed)) ){
+  lun1c_rppos.sum <- cbind(lun1c.rppos.s, lun1c.nr2.rppos.med, lun1c.nr2.rppos.cormed)[,-1]
+  colnames(lun1c_rppos.sum)[5] <- 'sample_med'
+  colnames(lun1c_rppos.sum)[6] <- 'sample_cormed'
+}
+lun1c_rppos.sum.cor<-cor(lun1c_rppos.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(lun1c_rppos.sum.cor, col=redblue100,axes=FALSE, main=glue("lun2 rppos pass1c"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+lun1c_rppos.sum.cor.p <- cor.mtest(lun1c_rppos.sum, method = 'spearman')
+# Plot
+corrplot(rotate(lun1c_rppos.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(lun1c_rppos.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(lun1c_rppos.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (pla rppos pass1c)
+```{r}
+if( all(names(pla1c.nr2.rppos.med) == names(pla1c.nr2.rppos.cormed)) &
+    all(pla1c.rppos.s[,1] == names(pla1c.nr2.rppos.cormed)) ){
+  pla1c_rppos.sum <- cbind(pla1c.rppos.s, pla1c.nr2.rppos.med, pla1c.nr2.rppos.cormed)[,-1]
+  colnames(pla1c_rppos.sum)[5] <- 'sample_med'
+  colnames(pla1c_rppos.sum)[6] <- 'sample_cormed'
+}
+pla1c_rppos.sum.cor<-cor(pla1c_rppos.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(pla1c_rppos.sum.cor, col=redblue100,axes=FALSE, main=glue("pla2 rppos pass1c"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+pla1c_rppos.sum.cor.p <- cor.mtest(pla1c_rppos.sum, method = 'spearman')
+# Plot
+corrplot(rotate(pla1c_rppos.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(pla1c_rppos.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(pla1c_rppos.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Compare the pan-tissue plots (rppos pass1c)
+```{r}
+par(mfrow=c(2,3),mar=c(0,0,0,0))
+# corrplot(rotate(gas1c_rppos.sum.cor),col=redblue100,addCoef.col="black",
+#          diag=TRUE,cl.pos="n",tl.pos="n",title="gas2 rppos pass1c",number.cex=1)
+corrplot(rotate(kid1c_rppos.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="kid2 rppos pass1c",number.cex=1)
+# corrplot(rotate(wadi1c_rppos.sum.cor),col=redblue100,addCoef.col="black",
+#          diag=TRUE,cl.pos="n",tl.pos="n",title="wadi2 rppos pass1c",number.cex=1)
+corrplot(rotate(liv1c_rppos.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="liv2 rppos pass1c",number.cex=1)
+corrplot(rotate(hrt1c_rppos.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="hrt2 rppos pass1c",number.cex=1)
+corrplot(rotate(lun1c_rppos.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="lun2 rppos pass1c",number.cex=1)
+par(mfrow=c(2,3),mar=c(0,0,0,0))
+corrplot(rotate(pla1c_rppos.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="pla2 rppos pass1c",number.cex=1)
+```
+
+## rpneg pass1c
+
+### Sample medians, correlation medians, sample order, sex, control, & time (gas rpneg pass1c)
+```{r}
+if( all(names(gas1c.nr2.rpneg.med) == names(gas1c.nr2.rpneg.cormed)) &
+    all(gas1c.rpneg.s[,1] == names(gas1c.nr2.rpneg.cormed)) ){
+  gas1c_rpneg.sum <- cbind(gas1c.rpneg.s, gas1c.nr2.rpneg.med, gas1c.nr2.rpneg.cormed)[,-1]
+  colnames(gas1c_rpneg.sum)[5] <- 'sample_med'
+  colnames(gas1c_rpneg.sum)[6] <- 'sample_cormed'
+}
+gas1c_rpneg.sum.cor<-cor(gas1c_rpneg.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(gas1c_rpneg.sum.cor, col=redblue100,axes=FALSE, main=glue("gas2 rpneg pass1c"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+gas1c_rpneg.sum.cor.p <- cor.mtest(gas1c_rpneg.sum, method = 'spearman')
+# Plot
+corrplot(rotate(gas1c_rpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(gas1c_rpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(gas1c_rpneg.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (kid rpneg pass1c)
+```{r}
+if( all(names(kid1c.nr2.rpneg.med) == names(kid1c.nr2.rpneg.cormed)) &
+    all(kid1c.rpneg.s[,1] == names(kid1c.nr2.rpneg.cormed)) ){
+  kid1c_rpneg.sum <- cbind(kid1c.rpneg.s, kid1c.nr2.rpneg.med, kid1c.nr2.rpneg.cormed)[,-1]
+  colnames(kid1c_rpneg.sum)[5] <- 'sample_med'
+  colnames(kid1c_rpneg.sum)[6] <- 'sample_cormed'
+}
+kid1c_rpneg.sum.cor<-cor(kid1c_rpneg.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(kid1c_rpneg.sum.cor, col=redblue100,axes=FALSE, main=glue("kid2 rpneg pass1c"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+kid1c_rpneg.sum.cor.p <- cor.mtest(kid1c_rpneg.sum, method = 'spearman')
+# Plot
+corrplot(rotate(kid1c_rpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(kid1c_rpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(kid1c_rpneg.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (wadi rpneg pass1c)
+```{r}
+if( all(names(wadi1c.nr2.rpneg.med) == names(wadi1c.nr2.rpneg.cormed)) &
+    all(wadi1c.rpneg.s[,1] == names(wadi1c.nr2.rpneg.cormed)) ){
+  wadi1c_rpneg.sum <- cbind(wadi1c.rpneg.s, wadi1c.nr2.rpneg.med, wadi1c.nr2.rpneg.cormed)[,-1]
+  colnames(wadi1c_rpneg.sum)[5] <- 'sample_med'
+  colnames(wadi1c_rpneg.sum)[6] <- 'sample_cormed'
+}
+
+wadi1c_rpneg.sum.cor<-cor(wadi1c_rpneg.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(wadi1c_rpneg.sum.cor, col=redblue100,axes=FALSE, main=glue("wadi2 rpneg pass1c"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+wadi1c_rpneg.sum.cor.p <- cor.mtest(wadi1c_rpneg.sum, method = 'spearman')
+# Plot
+corrplot(rotate(wadi1c_rpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(wadi1c_rpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(wadi1c_rpneg.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (liv rpneg pass1c)
+```{r}
+if( all(names(liv1c.nr2.rpneg.med) == names(liv1c.nr2.rpneg.cormed)) &
+    all(liv1c.rpneg.s[,1] == names(liv1c.nr2.rpneg.cormed)) ){
+  liv1c_rpneg.sum <- cbind(liv1c.rpneg.s, liv1c.nr2.rpneg.med, liv1c.nr2.rpneg.cormed)[,-1]
+  colnames(liv1c_rpneg.sum)[5] <- 'sample_med'
+  colnames(liv1c_rpneg.sum)[6] <- 'sample_cormed'
+}
+liv1c_rpneg.sum.cor<-cor(liv1c_rpneg.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(liv1c_rpneg.sum.cor, col=redblue100,axes=FALSE, main=glue("liv2 rpneg pass1c"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+liv1c_rpneg.sum.cor.p <- cor.mtest(liv1c_rpneg.sum, method = 'spearman')
+# Plot
+corrplot(rotate(liv1c_rpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(liv1c_rpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(liv1c_rpneg.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (hrt rpneg pass1c)
+```{r}
+if( all(names(hrt1c.nr2.rpneg.med) == names(hrt1c.nr2.rpneg.cormed)) &
+    all(hrt1c.rpneg.s[,1] == names(hrt1c.nr2.rpneg.cormed)) ){
+  hrt1c_rpneg.sum <- cbind(hrt1c.rpneg.s, hrt1c.nr2.rpneg.med, hrt1c.nr2.rpneg.cormed)[,-1]
+  colnames(hrt1c_rpneg.sum)[5] <- 'sample_med'
+  colnames(hrt1c_rpneg.sum)[6] <- 'sample_cormed'
+}
+hrt1c_rpneg.sum.cor<-cor(hrt1c_rpneg.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(hrt1c_rpneg.sum.cor, col=redblue100,axes=FALSE, main=glue("hrt2 rpneg pass1c"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+hrt1c_rpneg.sum.cor.p <- cor.mtest(hrt1c_rpneg.sum, method = 'spearman')
+# Plot
+corrplot(rotate(hrt1c_rpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(hrt1c_rpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(hrt1c_rpneg.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (lun rpneg pass1c)
+```{r}
+if( all(names(lun1c.nr2.rpneg.med) == names(lun1c.nr2.rpneg.cormed)) &
+    all(lun1c.rpneg.s[,1] == names(lun1c.nr2.rpneg.cormed)) ){
+  lun1c_rpneg.sum <- cbind(lun1c.rpneg.s, lun1c.nr2.rpneg.med, lun1c.nr2.rpneg.cormed)[,-1]
+  colnames(lun1c_rpneg.sum)[5] <- 'sample_med'
+  colnames(lun1c_rpneg.sum)[6] <- 'sample_cormed'
+}
+lun1c_rpneg.sum.cor<-cor(lun1c_rpneg.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(lun1c_rpneg.sum.cor, col=redblue100,axes=FALSE, main=glue("lun2 rpneg pass1c"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+lun1c_rpneg.sum.cor.p <- cor.mtest(lun1c_rpneg.sum, method = 'spearman')
+# Plot
+corrplot(rotate(lun1c_rpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(lun1c_rpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(lun1c_rpneg.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (pla rpneg pass1c)
+```{r}
+if( all(names(pla1c.nr2.rpneg.med) == names(pla1c.nr2.rpneg.cormed)) &
+    all(pla1c.rpneg.s[,1] == names(pla1c.nr2.rpneg.cormed)) ){
+  pla1c_rpneg.sum <- cbind(pla1c.rpneg.s, pla1c.nr2.rpneg.med, pla1c.nr2.rpneg.cormed)[,-1]
+  colnames(pla1c_rpneg.sum)[5] <- 'sample_med'
+  colnames(pla1c_rpneg.sum)[6] <- 'sample_cormed'
+}
+pla1c_rpneg.sum.cor<-cor(pla1c_rpneg.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(pla1c_rpneg.sum.cor, col=redblue100,axes=FALSE, main=glue("pla2 rpneg pass1c"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+pla1c_rpneg.sum.cor.p <- cor.mtest(pla1c_rpneg.sum, method = 'spearman')
+# Plot
+corrplot(rotate(pla1c_rpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(pla1c_rpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(pla1c_rpneg.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Compare the pan-tissue plots (rpneg pass1c)
+```{r}
+par(mfrow=c(2,3),mar=c(0,0,0,0))
+corrplot(rotate(gas1c_rpneg.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="gas2 rpneg pass1c",number.cex=1)
+corrplot(rotate(kid1c_rpneg.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="kid2 rpneg pass1c",number.cex=1)
+corrplot(rotate(wadi1c_rpneg.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="wadi2 rpneg pass1c",number.cex=1)
+corrplot(rotate(liv1c_rpneg.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="liv2 rpneg pass1c",number.cex=1)
+corrplot(rotate(hrt1c_rpneg.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="hrt2 rpneg pass1c",number.cex=1)
+corrplot(rotate(lun1c_rpneg.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="lun2 rpneg pass1c",number.cex=1)
+par(mfrow=c(2,3),mar=c(0,0,0,0))
+corrplot(rotate(pla1c_rpneg.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="pla2 rpneg pass1c",number.cex=1)
+```
+
+## ionpneg pass1c
+
+### Sample medians, correlation medians, sample order, sex, control, & time (gas ionpneg pass1c)
+```{r}
+if( all(names(gas1c.nr2.ionpneg.med) == names(gas1c.nr2.ionpneg.cormed)) &
+    all(gas1c.ionpneg.s[,1] == names(gas1c.nr2.ionpneg.cormed)) ){
+  gas1c_ionpneg.sum <- cbind(gas1c.ionpneg.s, gas1c.nr2.ionpneg.med, gas1c.nr2.ionpneg.cormed)[,-1]
+  colnames(gas1c_ionpneg.sum)[5] <- 'sample_med'
+  colnames(gas1c_ionpneg.sum)[6] <- 'sample_cormed'
+}
+gas1c_ionpneg.sum.cor<-cor(gas1c_ionpneg.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(gas1c_ionpneg.sum.cor, col=redblue100,axes=FALSE, main=glue("gas2 ionpneg pass1c"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+gas1c_ionpneg.sum.cor.p <- cor.mtest(gas1c_ionpneg.sum, method = 'spearman')
+# Plot
+corrplot(rotate(gas1c_ionpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(gas1c_ionpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(gas1c_ionpneg.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (kid ionpneg pass1c)
+```{r}
+if( all(names(kid1c.nr2.ionpneg.med) == names(kid1c.nr2.ionpneg.cormed)) &
+    all(kid1c.ionpneg.s[,1] == names(kid1c.nr2.ionpneg.cormed)) ){
+  kid1c_ionpneg.sum <- cbind(kid1c.ionpneg.s, kid1c.nr2.ionpneg.med, kid1c.nr2.ionpneg.cormed)[,-1]
+  colnames(kid1c_ionpneg.sum)[5] <- 'sample_med'
+  colnames(kid1c_ionpneg.sum)[6] <- 'sample_cormed'
+}
+kid1c_ionpneg.sum.cor<-cor(kid1c_ionpneg.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(kid1c_ionpneg.sum.cor, col=redblue100,axes=FALSE, main=glue("kid2 ionpneg pass1c"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+kid1c_ionpneg.sum.cor.p <- cor.mtest(kid1c_ionpneg.sum, method = 'spearman')
+# Plot
+corrplot(rotate(kid1c_ionpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(kid1c_ionpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(kid1c_ionpneg.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (wadi ionpneg pass1c)
+```{r}
+if( all(names(wadi1c.nr2.ionpneg.med) == names(wadi1c.nr2.ionpneg.cormed)) &
+    all(wadi1c.ionpneg.s[,1] == names(wadi1c.nr2.ionpneg.cormed)) ){
+  wadi1c_ionpneg.sum <- cbind(wadi1c.ionpneg.s, wadi1c.nr2.ionpneg.med, wadi1c.nr2.ionpneg.cormed)[,-1]
+  colnames(wadi1c_ionpneg.sum)[5] <- 'sample_med'
+  colnames(wadi1c_ionpneg.sum)[6] <- 'sample_cormed'
+}
+
+wadi1c_ionpneg.sum.cor<-cor(wadi1c_ionpneg.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(wadi1c_ionpneg.sum.cor, col=redblue100,axes=FALSE, main=glue("wadi2 ionpneg pass1c"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+wadi1c_ionpneg.sum.cor.p <- cor.mtest(wadi1c_ionpneg.sum, method = 'spearman')
+# Plot
+corrplot(rotate(wadi1c_ionpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(wadi1c_ionpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(wadi1c_ionpneg.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (liv ionpneg pass1c)
+```{r}
+if( all(names(liv1c.nr2.ionpneg.med) == names(liv1c.nr2.ionpneg.cormed)) &
+    all(liv1c.ionpneg.s[,1] == names(liv1c.nr2.ionpneg.cormed)) ){
+  liv1c_ionpneg.sum <- cbind(liv1c.ionpneg.s, liv1c.nr2.ionpneg.med, liv1c.nr2.ionpneg.cormed)[,-1]
+  colnames(liv1c_ionpneg.sum)[5] <- 'sample_med'
+  colnames(liv1c_ionpneg.sum)[6] <- 'sample_cormed'
+}
+liv1c_ionpneg.sum.cor<-cor(liv1c_ionpneg.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(liv1c_ionpneg.sum.cor, col=redblue100,axes=FALSE, main=glue("liv2 ionpneg pass1c"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+liv1c_ionpneg.sum.cor.p <- cor.mtest(liv1c_ionpneg.sum, method = 'spearman')
+# Plot
+corrplot(rotate(liv1c_ionpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(liv1c_ionpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(liv1c_ionpneg.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (hrt ionpneg pass1c)
+```{r}
+if( all(names(hrt1c.nr2.ionpneg.med) == names(hrt1c.nr2.ionpneg.cormed)) &
+    all(hrt1c.ionpneg.s[,1] == names(hrt1c.nr2.ionpneg.cormed)) ){
+  hrt1c_ionpneg.sum <- cbind(hrt1c.ionpneg.s, hrt1c.nr2.ionpneg.med, hrt1c.nr2.ionpneg.cormed)[,-1]
+  colnames(hrt1c_ionpneg.sum)[5] <- 'sample_med'
+  colnames(hrt1c_ionpneg.sum)[6] <- 'sample_cormed'
+}
+hrt1c_ionpneg.sum.cor<-cor(hrt1c_ionpneg.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(hrt1c_ionpneg.sum.cor, col=redblue100,axes=FALSE, main=glue("hrt2 ionpneg pass1c"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+hrt1c_ionpneg.sum.cor.p <- cor.mtest(hrt1c_ionpneg.sum, method = 'spearman')
+# Plot
+corrplot(rotate(hrt1c_ionpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(hrt1c_ionpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(hrt1c_ionpneg.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (lun ionpneg pass1c)
+```{r}
+if( all(names(lun1c.nr2.ionpneg.med) == names(lun1c.nr2.ionpneg.cormed)) &
+    all(lun1c.ionpneg.s[,1] == names(lun1c.nr2.ionpneg.cormed)) ){
+  lun1c_ionpneg.sum <- cbind(lun1c.ionpneg.s, lun1c.nr2.ionpneg.med, lun1c.nr2.ionpneg.cormed)[,-1]
+  colnames(lun1c_ionpneg.sum)[5] <- 'sample_med'
+  colnames(lun1c_ionpneg.sum)[6] <- 'sample_cormed'
+}
+lun1c_ionpneg.sum.cor<-cor(lun1c_ionpneg.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(lun1c_ionpneg.sum.cor, col=redblue100,axes=FALSE, main=glue("lun2 ionpneg pass1c"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+lun1c_ionpneg.sum.cor.p <- cor.mtest(lun1c_ionpneg.sum, method = 'spearman')
+# Plot
+corrplot(rotate(lun1c_ionpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(lun1c_ionpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(lun1c_ionpneg.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Sample medians, correlation medians, sample order, sex, control, & time (pla ionpneg pass1c)
+```{r}
+if( all(names(pla1c.nr2.ionpneg.med) == names(pla1c.nr2.ionpneg.cormed)) &
+    all(pla1c.ionpneg.s[,1] == names(pla1c.nr2.ionpneg.cormed)) ){
+  pla1c_ionpneg.sum <- cbind(pla1c.ionpneg.s, pla1c.nr2.ionpneg.med, pla1c.nr2.ionpneg.cormed)[,-1]
+  colnames(pla1c_ionpneg.sum)[5] <- 'sample_med'
+  colnames(pla1c_ionpneg.sum)[6] <- 'sample_cormed'
+}
+pla1c_ionpneg.sum.cor<-cor(pla1c_ionpneg.sum,method="spearman",use="pairwise.complete.obs")
+# Plot the corrplot
+image(pla1c_ionpneg.sum.cor, col=redblue100,axes=FALSE, main=glue("pla2 ionpneg pass1c"), asp = 1)
+# Collect p values
+# matrix of the p-value of the correlation
+pla1c_ionpneg.sum.cor.p <- cor.mtest(pla1c_ionpneg.sum, method = 'spearman')
+# Plot
+corrplot(rotate(pla1c_ionpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         diag=TRUE,cl.pos="n")
+corrplot(rotate(pla1c_ionpneg.sum.cor), col=redblue100,  
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # Combine with significance
+         p.mat = rotate(pla1c_ionpneg.sum.cor.p), sig.level = (1/15), 
+         diag=TRUE,cl.pos="n")
+```
+
+### Compare the pan-tissue plots (ionpneg pass1c)
+```{r}
+par(mfrow=c(2,3),mar=c(0,0,0,0))
+corrplot(rotate(gas1c_ionpneg.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="gas2 ionpneg pass1c",number.cex=1)
+# corrplot(rotate(kid1c_ionpneg.sum.cor),col=redblue100,addCoef.col="black",
+#          diag=TRUE,cl.pos="n",tl.pos="n",title="kid2 ionpneg pass1c",number.cex=1)
+corrplot(rotate(wadi1c_ionpneg.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="wadi2 ionpneg pass1c",number.cex=1)
+corrplot(rotate(liv1c_ionpneg.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="liv2 ionpneg pass1c",number.cex=1)
+corrplot(rotate(hrt1c_ionpneg.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="hrt2 ionpneg pass1c",number.cex=1)
+corrplot(rotate(lun1c_ionpneg.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="lun2 ionpneg pass1c",number.cex=1)
+par(mfrow=c(2,3),mar=c(0,0,0,0))
+corrplot(rotate(pla1c_ionpneg.sum.cor),col=redblue100,addCoef.col="black",
+         diag=TRUE,cl.pos="n",tl.pos="n",title="pla2 ionpneg pass1c",number.cex=1)
+```
+
+
+
+`r knitr::knit_exit()`
+
+
+### Center the sample median matrices and visualize (kid1a)
+```{r}
+# visualize the non-centered sample medians
+# image(rotate(kid1a.nr2.med),col=redblue100,axes=F, asp =1)
+# Center the sample medians (by tech)
+tmp<-apply(kid1a.nr2.med,2,function(x) median(x,na.rm=T))
+kid1a.nr2.med.ctr <- kid1a.nr2.med
+for(i in 1:ncol(kid1a.nr2.med.ctr)) {
+  kid1a.nr2.med.ctr[,i]<- round(kid1a.nr2.med[,i]-tmp[i], digits = 3)
+}
+
+# sort the sample annotation matrix
+if( all(kid1a.sct[,1] == as.numeric(row.names(kid1a.nr2.med))) ){
+  a <- range(kid1a.nr2.med.ctr, na.rm = TRUE)[1]
+  b <- range(kid1a.nr2.med.ctr, na.rm = TRUE)[2]
+  sex.type <- kid1a.sct[,2]
+  sex.type  <- ( (b - a) * ((sex.type - min(sex.type))/((max(sex.type) - min(sex.type)))) + a) 
+  control.type <- kid1a.sct[,3]
+  control.type  <- ( (b - a) * ((control.type - min(control.type))/((max(control.type) - min(control.type)))) + a) 
+  time.type <- kid1a.sct[,4]
+  time.type  <- ( (b - a) * ((time.type - min(time.type))/((max(time.type) - min(time.type)))) + a) 
+  sidebar <- cbind(sex.type,control.type,time.type)
+}
+# Plot the image
+image(rotate(cbind(sidebar[order(kid1a.sct[,2],kid1a.sct[,3],kid1a.sct[,4]),],
+                   kid1a.nr2.med.ctr[order(kid1a.sct[,2],kid1a.sct[,3],kid1a.sct[,4]),]))
+      ,col=redblue100,axes=F, asp =1)
+
+if(knit_time){
+  as.data.frame(kid1a.nr2.med.ctr[order(kid1a.sct[,2],kid1a.sct[,3],kid1a.sct[,4]),]) %>%
+    knitr::kable(format = "html") %>%
+    scroll_box(width = "100%", height = "400px")
+}
+```
+
+### Center the sample median matrices and visualize (kid1c)
+```{r}
+# visualize the non-centered sample medians
+# image(rotate(kid1c.nr2.med),col=redblue100,axes=F, asp =1)
+# Center the sample medians (by tech)
+tmp<-apply(kid1c.nr2.med,2,function(x) median(x,na.rm=T))
+kid1c.nr2.med.ctr <- kid1c.nr2.med
+for(i in 1:ncol(kid1c.nr2.med.ctr)) {
+  kid1c.nr2.med.ctr[,i]<- round(kid1c.nr2.med[,i]-tmp[i], digits = 3)
+}
+
+# sort the sample annotation matrix
+if( all(kid1c.sct[,1] == as.numeric(row.names(kid1c.nr2.med))) ){
+  a <- range(kid1c.nr2.med.ctr)[1]
+  b <- range(kid1c.nr2.med.ctr)[2]
+  sex.type <- kid1c.sct[,2]
+  sex.type  <- ( (b - a) * ((sex.type - min(sex.type))/((max(sex.type) - min(sex.type)))) + a) 
+  control.type <- kid1c.sct[,3]
+  control.type  <- ( (b - a) * ((control.type - min(control.type))/((max(control.type) - min(control.type)))) + a) 
+  time.type <- kid1c.sct[,4]
+  time.type  <- ( (b - a) * ((time.type - min(time.type))/((max(time.type) - min(time.type)))) + a) 
+  sidebar <- cbind(sex.type,control.type,time.type)
+}
+vm <- sidebar[order(kid1c.sct[,2],kid1c.sct[,3],kid1c.sct[,4]),]
+image(rotate(cbind(sidebar[order(kid1c.sct[,2],kid1c.sct[,3],kid1c.sct[,4]),],
+                   kid1c.nr2.med.ctr[order(kid1c.sct[,2],kid1c.sct[,3],kid1c.sct[,4]),]))
+      ,col=redblue100,axes=F, asp =1)
+if(knit_time){
+  as.data.frame(kid1c.nr2.med.ctr) %>%
+    knitr::kable(format = "html") %>%
+    scroll_box(width = "100%", height = "400px")
+}
+```
+
+
+
+### Visualize these matrices prior to centering and scaling by row (sex, control, time)
+### N-P Heatmap: Log2, imputed, Sex-Control-Time order (2)
+```{r}
+a <- range(gas.nr2.med)[1]
+b <- range(gas.nr2.med)[2]
+x <- tmp.sample1a[,3]
+sex.type  <- ( (b - a) * ((x - min(x))/((max(x) - min(x)))) + a) 
+x <- tmp.sample1a[,4]
+control.type <- ( (b - a) * ((x - min(x))/((max(x) - min(x)))) + a) 
+x <- as.factor(tmp.sample1a[,5]) %>% as.numeric()
+time.type  <- ( (b - a) * ((x - min(x))/((max(x) - min(x)))) + a) 
+sidebar<-cbind(sex.type,sex.type,sex.type,sex.type,sex.type, 
+               control.type,control.type, control.type, control.type, control.type,
+               time.type, time.type, time.type, time.type, time.type)
+
+image(
+  cbind(wadi1a.nr2[order(tmp.sample1a[,3],tmp.sample1a[,4],tmp.sample1a[,5]), heatmap(wadi1a.nr2)$colInd ], 
+        sidebar[order(tmp.sample1a[,3],tmp.sample1a[,4],tmp.sample1a[,5]),]),
+  col=redblue100,axes=F,main=glue("{TIS}2, f{P1}-HC, Sex-Control-Time"), asp =1)
+plot(apply(wadi1a.nr2[order(tmp.sample1a[,3],tmp.sample1a[,4],tmp.sample1a[,5]),
+     heatmap(wadi1a.nr2)$colInd],1,median))
+```
+
+
+
+visualize sample medians by:
+-sex, control, time
+-sample order
+
+
+
+
+
+
+
+# Examine the processing decisions of prior scripts
+```{r}
+names(gas1c_vars)[19] <- 'outlier_samples'
+gas_vars <- rbind(gas1a_vars, gas1c_vars)
+names(kid1c_vars)[19] <- 'outlier_samples'
+kid_vars <- rbind(kid1a_vars, kid1c_vars)
+names(wadi1c_vars)[19] <- 'outlier_samples'
+wadi_vars <- rbind(wadi1a_vars, wadi1c_vars)
+names(liv1c_vars)[19] <- 'outlier_samples'
+liv_vars <- rbind(liv1a_vars, liv1c_vars)
+names(hrt1c_vars)[19] <- 'outlier_samples'
+hrt_vars <- rbind(hrt1a_vars, hrt1c_vars)
+names(lun1c_vars)[19] <- 'outlier_samples'
+lun_vars <- rbind(lun1a_vars, lun1c_vars)
+names(pla1c_vars)[19] <- 'outlier_samples'
+pla_vars <- rbind(pla1a_vars, pla1c_vars)
+
+tis_vars <- rbind(gas_vars, kid_vars, wadi_vars, liv_vars, hrt_vars, lun_vars, pla_vars)
+tis_vars <- tis_vars[-5,]
+
+if(knit_time){
+  tis_vars %>%
+    knitr::kable(format = "html") %>%
+    scroll_box(width = "100%", height = "100%")
+}
+```
+
+# Examine Sample Medians
+
+## Do Sample Medians Correlate with NxN Correlations?
+```{r}
+# gas1a
+gas.med.1a <- apply(gas1a.nr2,1,median) %>% round(digits = 3)
+gas.cor.1a <- apply(cor(t(gas1a.nr2),method="spearman",use="pairwise.complete.obs"),1,median) %>% round(digits = 3)
+all(names(gas.med.1a) == names(gas.cor.1a))
+gas1a_rcor <- cor(x = gas.med.1a, y = gas.cor.1a , method = "spearman") %>% round(digits = 3)
+gas.pca.1a <- prcomp(t(gas1a.nr2), scale = FALSE)
+gas1a_pc1_med <- cor(x = gas.med.1a, y = gas.pca.1a$rotation[,1] , method = "spearman") %>% round(digits = 3)
+gas1a_pc2_med <- cor(x = gas.med.1a, y = gas.pca.1a$rotation[,2] , method = "spearman") %>% round(digits = 3)
+# gas1c
+gas.med.1c <- apply(gas1c.nr2,1,median) %>% round(digits = 3)
+gas.cor.1c <- apply(cor(t(gas1c.nr2),method="spearman",use="pairwise.complete.obs"),1,median) %>% round(digits = 3)
+all(names(gas.med.1c) == names(gas.cor.1c))
+gas1c_rcor <- cor(x = gas.med.1c, y = gas.cor.1c , method = "spearman") %>% round(digits = 3)
+gas.pca.1c <- prcomp(t(gas1c.nr2), scale = FALSE)
+gas1c_pc1_med <- cor(x = gas.med.1c, y = gas.pca.1c$rotation[,1] , method = "spearman") %>% round(digits = 3)
+gas1c_pc2_med <- cor(x = gas.med.1c, y = gas.pca.1c$rotation[,2] , method = "spearman") %>% round(digits = 3)
+
+# kid1a
+kid.med.1a <- apply(kid1a.nr2,1,median) %>% round(digits = 3)
+kid.cor.1a <- apply(cor(t(kid1a.nr2),method="spearman",use="pairwise.complete.obs"),1,median) %>% round(digits = 3)
+all(names(kid.med.1a) == names(kid.cor.1a))
+kid1a_rcor <- cor(x = kid.med.1a, y = kid.cor.1a , method = "spearman") %>% round(digits = 3)
+kid.pca.1a <- prcomp(t(kid1a.nr2), scale = FALSE)
+kid1a_pc1_med <- cor(x = kid.med.1a, y = kid.pca.1a$rotation[,1] , method = "spearman") %>% round(digits = 3)
+kid1a_pc2_med <- cor(x = kid.med.1a, y = kid.pca.1a$rotation[,2] , method = "spearman") %>% round(digits = 3)
+# kid1c
+kid.med.1c <- apply(kid1c.nr2,1,median) %>% round(digits = 3)
+kid.cor.1c <- apply(cor(t(kid1c.nr2),method="spearman",use="pairwise.complete.obs"),1,median) %>% round(digits = 3)
+all(names(kid.med.1c) == names(kid.cor.1c))
+kid1c_rcor <- cor(x = kid.med.1c, y = kid.cor.1c , method = "spearman") %>% round(digits = 3)
+kid.pca.1c <- prcomp(t(kid1c.nr2), scale = FALSE)
+kid1c_pc1_med <- cor(x = kid.med.1c, y = kid.pca.1c$rotation[,1] , method = "spearman") %>% round(digits = 3)
+kid1c_pc2_med <- cor(x = kid.med.1c, y = kid.pca.1c$rotation[,2] , method = "spearman") %>% round(digits = 3)
+
+# wadi1a
+wadi.med.1a <- apply(wadi1a.nr2,1,median) %>% round(digits = 3)
+wadi.cor.1a <- apply(cor(t(wadi1a.nr2),method="spearman",use="pairwise.complete.obs"),1,median) %>% round(digits = 3)
+all(names(wadi.med.1a) == names(wadi.cor.1a))
+wadi1a_rcor <- cor(x = wadi.med.1a, y = wadi.cor.1a , method = "spearman") %>% round(digits = 3)
+wadi.pca.1a <- prcomp(t(wadi1a.nr2), scale = FALSE)
+wadi1a_pc1_med <- cor(x = wadi.med.1a, y = wadi.pca.1a$rotation[,1] , method = "spearman") %>% round(digits = 3)
+wadi1a_pc2_med <- cor(x = wadi.med.1a, y = wadi.pca.1a$rotation[,2] , method = "spearman") %>% round(digits = 3)
+# wadi1c
+wadi.med.1c <- apply(wadi1c.nr2,1,median) %>% round(digits = 3)
+wadi.cor.1c <- apply(cor(t(wadi1c.nr2),method="spearman",use="pairwise.complete.obs"),1,median) %>% round(digits = 3)
+all(names(wadi.med.1c) == names(wadi.cor.1c))
+wadi1c_rcor <- cor(x = wadi.med.1c, y = wadi.cor.1c , method = "spearman") %>% round(digits = 3)
+wadi.pca.1c <- prcomp(t(wadi1c.nr2), scale = FALSE)
+wadi1c_pc1_med <- cor(x = wadi.med.1c, y = wadi.pca.1c$rotation[,1] , method = "spearman") %>% round(digits = 3)
+wadi1c_pc2_med <- cor(x = wadi.med.1c, y = wadi.pca.1c$rotation[,2] , method = "spearman") %>% round(digits = 3)
+
+# liv1a
+liv.med.1a <- apply(liv1a.nr2,1,median) %>% round(digits = 3)
+liv.cor.1a <- apply(cor(t(liv1a.nr2),method="spearman",use="pairwise.complete.obs"),1,median) %>% round(digits = 3)
+all(names(liv.med.1a) == names(liv.cor.1a))
+liv1a_rcor <- cor(x = liv.med.1a, y = liv.cor.1a , method = "spearman") %>% round(digits = 3)
+liv.pca.1a <- prcomp(t(liv1a.nr2), scale = FALSE)
+liv1a_pc1_med <- cor(x = liv.med.1a, y = liv.pca.1a$rotation[,1] , method = "spearman") %>% round(digits = 3)
+liv1a_pc2_med <- cor(x = liv.med.1a, y = liv.pca.1a$rotation[,2] , method = "spearman") %>% round(digits = 3)
+# liv1c
+liv.med.1c <- apply(liv1c.nr2,1,median) %>% round(digits = 3)
+liv.cor.1c <- apply(cor(t(liv1c.nr2),method="spearman",use="pairwise.complete.obs"),1,median) %>% round(digits = 3)
+all(names(liv.med.1c) == names(liv.cor.1c))
+liv1c_rcor <- cor(x = liv.med.1c, y = liv.cor.1c , method = "spearman") %>% round(digits = 3)
+liv.pca.1c <- prcomp(t(liv1c.nr2), scale = FALSE)
+liv1c_pc1_med <- cor(x = liv.med.1c, y = liv.pca.1c$rotation[,1] , method = "spearman") %>% round(digits = 3)
+liv1c_pc2_med <- cor(x = liv.med.1c, y = liv.pca.1c$rotation[,2] , method = "spearman") %>% round(digits = 3)
+
+# hrt1a
+hrt.med.1a <- apply(hrt1a.nr2,1,median) %>% round(digits = 3)
+hrt.cor.1a <- apply(cor(t(hrt1a.nr2),method="spearman",use="pairwise.complete.obs"),1,median) %>% round(digits = 3)
+all(names(hrt.med.1a) == names(hrt.cor.1a))
+hrt1a_rcor <- cor(x = hrt.med.1a, y = hrt.cor.1a , method = "spearman") %>% round(digits = 3)
+hrt.pca.1a <- prcomp(t(hrt1a.nr2), scale = FALSE)
+hrt1a_pc1_med <- cor(x = hrt.med.1a, y = hrt.pca.1a$rotation[,1] , method = "spearman") %>% round(digits = 3)
+hrt1a_pc2_med <- cor(x = hrt.med.1a, y = hrt.pca.1a$rotation[,2] , method = "spearman") %>% round(digits = 3)
+# hrt1c
+hrt.med.1c <- apply(hrt1c.nr2,1,median) %>% round(digits = 3)
+hrt.cor.1c <- apply(cor(t(hrt1c.nr2),method="spearman",use="pairwise.complete.obs"),1,median) %>% round(digits = 3)
+all(names(hrt.med.1c) == names(hrt.cor.1c))
+hrt1c_rcor <- cor(x = hrt.med.1c, y = hrt.cor.1c , method = "spearman") %>% round(digits = 3)
+hrt.pca.1c <- prcomp(t(hrt1c.nr2), scale = FALSE)
+hrt1c_pc1_med <- cor(x = hrt.med.1c, y = hrt.pca.1c$rotation[,1] , method = "spearman") %>% round(digits = 3)
+hrt1c_pc2_med <- cor(x = hrt.med.1c, y = hrt.pca.1c$rotation[,2] , method = "spearman") %>% round(digits = 3)
+
+# lun1a
+lun.med.1a <- apply(lun1a.nr2,1,median) %>% round(digits = 3)
+lun.cor.1a <- apply(cor(t(lun1a.nr2),method="spearman",use="pairwise.complete.obs"),1,median) %>% round(digits = 3)
+all(names(lun.med.1a) == names(lun.cor.1a))
+lun1a_rcor <- cor(x = lun.med.1a, y = lun.cor.1a , method = "spearman") %>% round(digits = 3)
+lun.pca.1a <- prcomp(t(lun1a.nr2), scale = FALSE)
+lun1a_pc1_med <- cor(x = lun.med.1a, y = lun.pca.1a$rotation[,1] , method = "spearman") %>% round(digits = 3)
+lun1a_pc2_med <- cor(x = lun.med.1a, y = lun.pca.1a$rotation[,2] , method = "spearman") %>% round(digits = 3)
+# lun1c
+lun.med.1c <- apply(lun1c.nr2,1,median) %>% round(digits = 3)
+lun.cor.1c <- apply(cor(t(lun1c.nr2),method="spearman",use="pairwise.complete.obs"),1,median) %>% round(digits = 3)
+all(names(lun.med.1c) == names(lun.cor.1c))
+lun1c_rcor <- cor(x = lun.med.1c, y = lun.cor.1c , method = "spearman") %>% round(digits = 3)
+lun.pca.1c <- prcomp(t(lun1c.nr2), scale = FALSE)
+lun1c_pc1_med <- cor(x = lun.med.1c, y = lun.pca.1c$rotation[,1] , method = "spearman") %>% round(digits = 3)
+lun1c_pc2_med <- cor(x = lun.med.1c, y = lun.pca.1c$rotation[,2] , method = "spearman") %>% round(digits = 3)
+
+# pla1a
+pla.med.1a <- apply(pla1a.nr2,1,median) %>% round(digits = 3)
+pla.cor.1a <- apply(cor(t(pla1a.nr2),method="spearman",use="pairwise.complete.obs"),1,median) %>% round(digits = 3)
+all(names(pla.med.1a) == names(pla.cor.1a))
+pla1a_rcor <- cor(x = pla.med.1a, y = pla.cor.1a , method = "spearman") %>% round(digits = 3)
+pla.pca.1a <- prcomp(t(pla1a.nr2), scale = FALSE)
+pla1a_pc1_med <- cor(x = pla.med.1a, y = pla.pca.1a$rotation[,1] , method = "spearman") %>% round(digits = 3)
+pla1a_pc2_med <- cor(x = pla.med.1a, y = pla.pca.1a$rotation[,2] , method = "spearman") %>% round(digits = 3)
+# pla1c
+pla.med.1c <- apply(pla1c.nr2,1,median) %>% round(digits = 3)
+pla.cor.1c <- apply(cor(t(pla1c.nr2),method="spearman",use="pairwise.complete.obs"),1,median) %>% round(digits = 3)
+all(names(pla.med.1c) == names(pla.cor.1c))
+pla1c_rcor <- cor(x = pla.med.1c, y = pla.cor.1c , method = "spearman") %>% round(digits = 3)
+pla.pca.1c <- prcomp(t(pla1c.nr2), scale = FALSE)
+pla1c_pc1_med <- cor(x = pla.med.1c, y = pla.pca.1c$rotation[,1] , method = "spearman") %>% round(digits = 3)
+pla1c_pc2_med <- cor(x = pla.med.1c, y = pla.pca.1c$rotation[,2] , method = "spearman") %>% round(digits = 3)
+
+# Collect stats
+rcor_df <- data.frame(tis = c('gas','kid','wadi','liv','hrt','lun','pla'),
+                      pass = c('pass1a','pass1a','pass1a','pass1a','pass1a','pass1a','pass1a',
+                               'pass1c','pass1c','pass1c','pass1c','pass1c','pass1c','pass1c'),
+           medcor = c(gas1a_rcor, kid1a_rcor, wadi1a_rcor, liv1a_rcor, hrt1a_rcor, lun1a_rcor, pla1a_rcor, 
+                    gas1c_rcor, kid1c_rcor, wadi1c_rcor, liv1c_rcor, hrt1c_rcor, lun1c_rcor, pla1c_rcor),
+           medpc1 = c(gas1a_pc1_med, kid1a_pc1_med, wadi1a_pc1_med, liv1a_pc1_med, hrt1a_pc1_med, lun1a_pc1_med, pla1a_pc1_med, 
+                    gas1c_pc1_med, kid1c_pc1_med, wadi1c_pc1_med, liv1c_pc1_med, hrt1c_pc1_med, lun1c_pc1_med, pla1c_pc1_med),
+           medpc2 = c(gas1a_pc2_med, kid1a_pc2_med, wadi1a_pc2_med, liv1a_pc2_med, hrt1a_pc2_med, lun1a_pc2_med, pla1a_pc2_med, 
+                    gas1c_pc2_med, kid1c_pc2_med, wadi1c_pc2_med, liv1c_pc2_med, hrt1c_pc2_med, lun1c_pc2_med, pla1c_pc2_med)) %>%
+  arrange(desc(abs(medcor)))
+
+row.names(rcor_df) <- paste0(rcor_df[,1],'_',rcor_df[,2])
+heatmap(as.matrix(abs(rcor_df[,3:5])), col = redblue100, Colv = NA)
+
+if(knit_time){
+  rcor_df[,3:5] %>%
+    knitr::kable(format = "html") %>%
+    scroll_box(width = "100%", height = "100%")
+}
+
+plot(x = pla.med.1c, y = pla.cor.1c)
+
+```
+
