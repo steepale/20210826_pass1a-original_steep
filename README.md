@@ -7,12 +7,12 @@ This repo serves as a demonstration  of processing metabolomics datasets, or sim
 -docs: relevant documents to aid scripted analyses (usually excel scripts)  
 -functions: functions loaded into scripts for functionally programming  
 -lit: relevant literature to analyses  
--ppt: powerpoints supporting analyses  
+-ppt: PowerPoints supporting analyses  
 -scripts: scripts, almost always in R or R Markdown. To examine scripts and get a sense of the analysis, clone the repo and open the rendered HTML files locally  
 -style: .css files to aid in script rendering from R Markdown to HTML  
 
 ## Nomenclature
--File are often named with 3 parts sperated by underscores:  
+-File are often named with 3 parts separated by underscores:  
     -date as an identifier  
     -explanation  
     -author/editor  
@@ -21,7 +21,8 @@ This repo serves as a demonstration  of processing metabolomics datasets, or sim
 ## How to follow the analyses
 Clone the repo and examine the rendered HTML files by date for a step-by-step analysis of processing these data. These data were not entirely processed; drift corrected data from an analogous dataset (PASS1C) did not agree because of data mishandling and improper drift correction.
 
-A good example script to exmaine: 20211213_all-ionpneg-pass1a-eda_steep.html
+A good example script to examine:  
+20210826_pass1a-original_steep/scripts/pass1a_original/ionpneg/tissue_processing/20211213_all-ionpneg-pass1a-eda_steep.html
 
 ## Withheld
 Data and additional scripts withheld for brevity
