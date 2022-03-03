@@ -21,6 +21,8 @@ This repo serves as a demonstration  of processing metabolomics datasets, or sim
 ## How to follow the analyses
 Clone the repo and examine the rendered HTML files by date for a step-by-step analysis of processing these data. These data were not entirely processed; drift corrected data from an analogous dataset (PASS1C) did not agree because of data mishandling and improper drift correction.
 
+A good example script to exmaine: 20211213_all-ionpneg-pass1a-eda_steep.html
+
 ## Withheld
 Data and additional scripts withheld for brevity
 
