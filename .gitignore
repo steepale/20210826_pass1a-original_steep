@@ -9,5 +9,4 @@ scripts/rpneg_post_is
 scripts/rppos_post_is
 B-MIS-normalization
 scripts/2021*
-ppt
-
+ppt/*.pdf
