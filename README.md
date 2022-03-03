@@ -3,7 +3,7 @@
 This repo serves as a demonstration  of processing metabolomics datasets, or simply of data in general.
 
 ## Folders
--colors: 2 RGB files with craft color schemes--superior to R or RColorBrewer for heatmap visualization (author: Jun Li)  
+- colors: 2 RGB files with craft color schemes--superior to R or RColorBrewer for heatmap visualization (author: Jun Li)  
 -docs: relevant documents to aid scripted analyses (usually excel scripts)  
 -functions: functions loaded into scripts for functionally programming  
 -lit: relevant literature to analyses  
